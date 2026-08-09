@@ -1,9 +1,18 @@
 {
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.864.0",
     "nodemailer": "^6.9.16",
+    "pg": "^8.16.3",
     "twilio": "^5.3.5"
   },
+  "devDependencies": {},
+  "optionalDependencies": {},
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "migrate:postgres": "node tools/import_csv_to_postgres.js",
+    "migrate:assets": "node tools/upload_assets_to_r2.js"
   }
 }

@@ -32,3 +32,5 @@ outputs/
 *.tar.gz
 
 _github_upload/
+_github_upload_code/
+migration_export/
