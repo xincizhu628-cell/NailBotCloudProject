@@ -72,6 +72,37 @@ function coerceValue(value) {
   return value === "" ? null : value;
 }
 
+function normalizeCell(table, column, value) {
+  const text = String(value ?? "").trim();
+
+  if (table === "device_info" && column === "type") {
+    const deviceTypeMap = new Map([
+      ["主机", "main_unit"],
+      ["main", "main_unit"],
+      ["main_unit", "main_unit"],
+      ["打印机", "printer"],
+      ["printer", "printer"],
+    ]);
+    return deviceTypeMap.get(text) || value;
+  }
+
+  if (table === "promotion" && column === "promo_type") {
+    const promoTypeMap = new Map([
+      ["满减优惠", "money_off"],
+      ["money_off", "money_off"],
+      ["折扣优惠", "percent_off"],
+      ["percent_off", "percent_off"],
+      ["买送优惠", "buy_x_get_y"],
+      ["buy_x_get_y", "buy_x_get_y"],
+      ["免费商品", "free_product"],
+      ["free_product", "free_product"],
+    ]);
+    return promoTypeMap.get(text) || value;
+  }
+
+  return value;
+}
+
 async function insertTable(client, tableInfo) {
   const filePath = path.join(csvDir, tableInfo.file);
   if (!fs.existsSync(filePath)) {
@@ -91,7 +122,7 @@ async function insertTable(client, tableInfo) {
     const values = [];
     const groups = batch.map((row, rowIndex) => {
       const placeholders = columns.map((_, columnIndex) => {
-        values.push(coerceValue(row[columnIndex] ?? ""));
+        values.push(coerceValue(normalizeCell(tableInfo.table, columns[columnIndex], row[columnIndex] ?? "")));
         return `$${rowIndex * columns.length + columnIndex + 1}`;
       });
       return `(${placeholders.join(", ")})`;
