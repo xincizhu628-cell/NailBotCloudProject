@@ -36,6 +36,7 @@ const mimeTypes = {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+    /*
     if (req.method === "POST" && url.pathname === "/api/admin/login") {
       await handleAdminLogin(req, res);
       return;
@@ -48,15 +49,18 @@ const server = http.createServer(async (req, res) => {
       await handleAdminSession(req, res);
       return;
     }
+    */
     // Temporarily bypass admin auth while checking Railway/admin routing.
     // Restore this guard before production admin access is opened.
     // if (await rejectUnauthenticatedAdminRequest(req, res, url)) {
     //   return;
     // }
+    /*
     if (req.method === "POST" && url.pathname === "/api/admin/create-account") {
       await handleAdminCreateAccount(req, res);
       return;
     }
+    */
     if (req.method === "POST" && url.pathname === "/api/ai-generate") {
       await handleAiGenerate(req, res);
       return;
@@ -693,6 +697,7 @@ async function handleUserDraft(req, res, url) {
   }
 }
 
+/*
 async function handleAdminLogin(req, res) {
   const body = await readJson(req);
   try {
@@ -755,6 +760,7 @@ async function handleAdminCreateAccount(req, res) {
     sendJson(res, 500, { ok: false, error: error.message || "Failed to create admin account." });
   }
 }
+*/
 
 async function handleAdminImportProduct(req, res) {
   const body = await readJson(req);
@@ -1682,6 +1688,7 @@ function parseCookies(req) {
     }));
 }
 
+/*
 function adminSessionToken(req) {
   return parseCookies(req)[adminCookieName] || "";
 }
@@ -1720,6 +1727,7 @@ async function rejectUnauthenticatedAdminRequest(req, res, url) {
   sendJson(res, 401, { ok: false, error: "Admin login required." }, { "Cache-Control": "no-store" });
   return true;
 }
+*/
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
