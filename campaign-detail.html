@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Campaign Detail</title>
+    <style>
+      :root {
+        --bg: #fff7fb;
+        --ink: #2d2330;
+        --muted: #756b78;
+        --pink-soft: #ffe4ef;
+        --pink-strong: #df5e93;
+        --violet: #8c7cff;
+        --mint: #85e6d5;
+        --line: rgba(111, 77, 97, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top right, rgba(132, 230, 213, 0.2), transparent 32rem),
+          linear-gradient(135deg, #fff9fc, var(--bg) 58%, #f7fbff);
+      }
+
+      .page {
+        width: min(980px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+
+      .topline {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+
+      a {
+        color: var(--pink-strong);
+        font-weight: 900;
+        text-decoration: none;
+      }
+
+      .hero,
+      .content {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255,255,255,.86);
+      }
+
+      .hero {
+        min-height: 340px;
+        display: grid;
+        align-content: end;
+        gap: 10px;
+        padding: 28px;
+        color: #fff;
+        background:
+          radial-gradient(circle at 22% 18%, rgba(255,255,255,.86) 0 14px, transparent 15px),
+          linear-gradient(135deg, var(--pink-strong), var(--violet) 58%, var(--mint));
+        box-shadow: 0 24px 70px rgba(208, 106, 156, 0.18);
+      }
+
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(2.3rem, 6vw, 4.8rem);
+      }
+
+      .hero p {
+        max-width: 650px;
+        margin: 0;
+        font-size: 1.05rem;
+        line-height: 1.6;
+      }
+
+      .content {
+        margin-top: 18px;
+        padding: 22px;
+        color: var(--muted);
+        line-height: 1.75;
+      }
+
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .tag {
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: var(--pink-soft);
+        color: var(--pink-strong);
+        font-weight: 900;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="topline">
+        <strong>Campaign Detail</strong>
+        <a href="task-center.html?return=member">Back to task center</a>
+      </header>
+      <section class="hero">
+        <h1 id="campaign-title">Aurora Creator Week</h1>
+        <p id="campaign-subtitle">A featured member campaign page placeholder for mission promotion, reward rules, and activity storytelling.</p>
+      </section>
+      <section class="content">
+        <h2>Activity Introduction</h2>
+        <p>
+          This page will later hold the official activity artwork, task rules, reward tiers,
+          winner examples, and sharing guidance. For now it is a polished placeholder linked
+          from the Task Center activity rail.
+        </p>
+        <div class="tag-row">
+          <span class="tag">High Reward</span>
+          <span class="tag">Nail Design</span>
+          <span class="tag">Social Sharing</span>
+          <span class="tag">Member Campaign</span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reward Mall</title>
+    <style>
+      :root {
+        --bg: #fff7fb;
+        --panel: rgba(255, 255, 255, 0.84);
+        --ink: #2d2330;
+        --muted: #756b78;
+        --pink-soft: #ffe4ef;
+        --pink-strong: #df5e93;
+        --violet: #8c7cff;
+        --mint: #85e6d5;
+        --line: rgba(111, 77, 97, 0.16);
+        --shadow: 0 24px 70px rgba(208, 106, 156, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top right, rgba(132, 230, 213, 0.2), transparent 32rem),
+          linear-gradient(135deg, #fff9fc, var(--bg) 55%, #f7fbff);
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .page {
+        width: min(1220px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+
+      .topline {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+
+      .topline a {
+        color: var(--pink-strong);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        color: var(--pink-strong);
+        text-transform: uppercase;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 0;
+        font-size: clamp(2rem, 4vw, 3.6rem);
+      }
+
+      .filter-board,
+      .promo-rail,
+      .mall-grid-wrap {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 14px 45px rgba(105, 75, 95, 0.08);
+      }
+
+      .filter-board {
+        padding: 16px;
+        margin-bottom: 18px;
+      }
+
+      .search-board {
+        margin-bottom: 18px;
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .category-board {
+        margin-top: -4px;
+      }
+
+      .category-row {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 2px;
+      }
+
+      .category-row button {
+        flex: 0 0 auto;
+        min-height: 36px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        font-weight: 800;
+      }
+
+      .category-row button.active {
+        border-color: rgba(223, 94, 147, 0.34);
+        background: var(--pink-soft);
+        color: var(--pink-strong);
+      }
+
+      .search {
+        height: 46px;
+        width: min(420px, 100%);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .search strong {
+        color: var(--pink-strong);
+      }
+
+      .search input {
+        width: 100%;
+        border: 0;
+        outline: 0;
+        background: transparent;
+      }
+
+      .promo-rail {
+        margin-bottom: 18px;
+        padding: 18px;
+      }
+
+      .rail-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-end;
+        margin-bottom: 14px;
+      }
+
+      .promo-track {
+        display: flex;
+        gap: 14px;
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+        padding-bottom: 6px;
+      }
+
+      .promo-card {
+        flex: 0 0 min(420px, 82vw);
+        min-height: 170px;
+        display: grid;
+        align-content: end;
+        gap: 8px;
+        padding: 18px;
+        border-radius: 8px;
+        color: #fff;
+        scroll-snap-align: start;
+        background:
+          radial-gradient(circle at 20% 18%, rgba(255,255,255,.85) 0 12px, transparent 13px),
+          linear-gradient(135deg, var(--pink-strong), var(--violet));
+      }
+
+      .promo-card:nth-child(2n) {
+        background:
+          radial-gradient(circle at 72% 22%, rgba(255,255,255,.8) 0 12px, transparent 13px),
+          linear-gradient(135deg, #85e6d5, #8c7cff);
+      }
+
+      .promo-card strong {
+        font-size: 1.6rem;
+      }
+
+      .promo-card p {
+        margin-bottom: 0;
+        opacity: 0.9;
+      }
+
+      .mall-grid-wrap {
+        padding: 18px;
+      }
+
+      .mall-grid-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-end;
+        margin-bottom: 16px;
+      }
+
+      .product-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .product {
+        position: relative;
+        min-height: 246px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .product-art {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 42% 22%, rgba(255,255,255,.9) 0 8px, transparent 9px),
+          linear-gradient(145deg, var(--a), var(--b));
+      }
+
+      .product-art::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 28px;
+        width: 42%;
+        height: 62%;
+        transform: translateX(-50%);
+        border-radius: 52% 52% 38% 38% / 28% 28% 62% 62%;
+        background: linear-gradient(150deg, rgba(255,255,255,.72), rgba(255,255,255,.1));
+        box-shadow: inset 0 0 18px rgba(255,255,255,.5), 0 14px 30px rgba(64, 46, 58, 0.14);
+      }
+
+      .product-info,
+      .product-action {
+        position: absolute;
+        z-index: 1;
+        bottom: 10px;
+      }
+
+      .product-info {
+        left: 10px;
+        right: 78px;
+      }
+
+      .product-info strong,
+      .product-info span {
+        display: block;
+      }
+
+      .product-info strong {
+        line-height: 1.15;
+      }
+
+      .product-info span {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .product-action {
+        right: 10px;
+        display: grid;
+        justify-items: end;
+        gap: 6px;
+      }
+
+      .stock {
+        padding: 4px 7px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.8);
+        color: var(--pink-strong);
+        font-size: 0.72rem;
+        font-weight: 900;
+      }
+
+      .redeem {
+        min-height: 34px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        font-weight: 900;
+        background: linear-gradient(135deg, var(--pink-strong), var(--violet));
+      }
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        background: rgba(45, 35, 48, 0.38);
+        backdrop-filter: blur(10px);
+      }
+
+      .modal.hidden {
+        display: none;
+      }
+
+      .purchase-card,
+      .confirm-card {
+        width: min(720px, calc(100vw - 32px));
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: var(--shadow);
+      }
+
+      .modal-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 16px;
+      }
+
+      .close {
+        width: 36px;
+        height: 36px;
+        border: 1px solid rgba(223, 94, 147, 0.28);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--pink-strong);
+        font-weight: 900;
+      }
+
+      .address-form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .address-form label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.84rem;
+        font-weight: 800;
+      }
+
+      .address-form input,
+      .address-form textarea {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 12px;
+        outline: 0;
+      }
+
+      .address-form .wide {
+        grid-column: 1 / -1;
+      }
+
+      .confirm-redeem {
+        width: 100%;
+        min-height: 46px;
+        margin-top: 16px;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        font-weight: 900;
+        background: linear-gradient(135deg, var(--pink-strong), var(--violet));
+      }
+
+      .confirm-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: grid;
+        place-items: center;
+        background: rgba(45, 35, 48, 0.28);
+      }
+
+      .confirm-layer.hidden {
+        display: none;
+      }
+
+      .confirm-card {
+        width: min(360px, calc(100vw - 40px));
+        text-align: center;
+      }
+
+      .confirm-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .confirm-actions button {
+        min-height: 42px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fff;
+        font-weight: 900;
+      }
+
+      .confirm-actions .yes {
+        border-color: transparent;
+        color: #fff;
+        background: linear-gradient(135deg, var(--pink-strong), var(--violet));
+      }
+
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 22px;
+        transform: translateX(-50%) translateY(24px);
+        opacity: 0;
+        padding: 12px 16px;
+        border-radius: 8px;
+        background: #2d2330;
+        color: #fff;
+        transition: 0.2s ease;
+        z-index: 40;
+      }
+
+      .toast.show {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+      }
+
+      @media (max-width: 1080px) {
+        .product-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 680px) {
+        .topline,
+        .filter-head,
+        .mall-grid-head {
+          align-items: stretch;
+          flex-direction: column;
+          display: flex;
+        }
+
+        .product-grid,
+        .address-form {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 460px) {
+        .product-grid,
+        .address-form {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="topline">
+        <div>
+          <p class="eyebrow">Reward Mall</p>
+          <h1>积分商城</h1>
+        </div>
+        <a href="index.html?view=member&member=store">Back to member center</a>
+      </header>
+
+      <section class="search-board">
+        <label class="search">
+          <strong>Search</strong>
+          <input id="mall-search" type="search" placeholder="Search rewards, coupons, products" />
+        </label>
+      </section>
+
+      <section class="promo-rail">
+        <div class="rail-head">
+          <div>
+            <p class="eyebrow">Campaigns & New Arrivals</p>
+            <h2>优惠活动 + 新品宣传</h2>
+          </div>
+          <span>Drag sideways</span>
+        </div>
+        <div class="promo-track">
+          <article class="promo-card"><strong>40% OFF</strong><p>Mid-year printer session coupon, limited member redemption.</p></article>
+          <article class="promo-card"><strong>New Cat Eye Kit</strong><p>Fresh magnetic press-on set with soft champagne glow.</p></article>
+          <article class="promo-card"><strong>600pt Gift Box</strong><p>Creator reward pack for users with 20+ mission completions.</p></article>
+          <article class="promo-card"><strong>Birthday Bonus</strong><p>Redeem a mystery salon gift in your member month.</p></article>
+        </div>
+      </section>
+
+      <section class="filter-board category-board">
+        <p class="eyebrow">Categories</p>
+        <div class="category-row" id="categories"></div>
+      </section>
+
+      <section class="mall-grid-wrap">
+        <div class="mall-grid-head">
+          <div>
+            <p class="eyebrow">Rewards</p>
+            <h2>商品列表</h2>
+          </div>
+          <strong id="result-count">All · 0 items</strong>
+        </div>
+        <div class="product-grid" id="product-grid"></div>
+      </section>
+    </main>
+
+    <div class="modal hidden" id="purchase-modal">
+      <section class="purchase-card">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Points Purchase</p>
+            <h2 id="purchase-title">Reward</h2>
+            <p id="purchase-meta">0 pt</p>
+          </div>
+          <button class="close" id="close-purchase">×</button>
+        </div>
+        <form class="address-form" id="address-form">
+          <label>Full name<input required value="Annie Chen" /></label>
+          <label>Phone<input required value="+61 400 888 266" /></label>
+          <label class="wide">Street address<input required value="88 Sample Street" /></label>
+          <label>Suburb<input required value="Box Hill" /></label>
+          <label>State<input required value="VIC" /></label>
+          <label>Postcode<input required value="3128" /></label>
+          <label>Country<input required value="Australia" /></label>
+          <label class="wide">Delivery note<textarea rows="3">Leave at reception if nobody answers.</textarea></label>
+        </form>
+        <button class="confirm-redeem" id="confirm-redeem">确认兑换</button>
+      </section>
+    </div>
+
+    <div class="confirm-layer hidden" id="confirm-layer">
+      <section class="confirm-card">
+        <h2>是否确认兑换？</h2>
+        <p id="confirm-copy">This will use your points for the selected reward.</p>
+        <div class="confirm-actions">
+          <button class="yes" id="final-yes">是</button>
+          <button id="final-no">否</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="toast" id="toast">兑换完成，奖励将按地址寄出。</div>
+
+    <script>
+      const categories = ["All", "Coupons", "Press-On Sets", "Tools", "Salon Benefits", "Gift Box", "Limited", "New"];
+      const products = [
+        ["40%OFF Coupon", "Coupon", 1200, 48, "#ffe4ef", "#8c7cff", ["coupons", "limited"]],
+        ["Cat Eye Press-On", "Press-On Set", 2600, 16, "#d9c289", "#fff8dd", ["press-on sets", "new"]],
+        ["Crystal Accent Pack", "Salon Benefit", 1800, 22, "#f8d8ff", "#85e6d5", ["salon benefits"]],
+        ["Mini UV Lamp", "Tool", 4200, 9, "#cfd8ff", "#8c7cff", ["tools"]],
+        ["Creator Gift Box", "Gift Box", 3600, 12, "#ffd1e4", "#df5e93", ["gift box", "limited"]],
+        ["Pearl Chrome Set", "Press-On Set", 2800, 20, "#fff6fb", "#c9c6d3", ["press-on sets"]],
+        ["Birthday Mystery", "Salon Benefit", 900, 36, "#fff4e8", "#f7a8c8", ["salon benefits"]],
+        ["Design Sticker Sheet", "Tool", 750, 80, "#d9fff7", "#85e6d5", ["tools", "new"]],
+        ["Mid-Autumn Voucher", "Coupon", 1500, 42, "#fff1c7", "#df5e93", ["coupons"]],
+        ["Aurora Trial Set", "Press-On Set", 2200, 24, "#bff7ef", "#8c7cff", ["press-on sets", "new"]],
+        ["Member Care Kit", "Gift Box", 3100, 14, "#ffe4ef", "#85e6d5", ["gift box"]],
+        ["Print Session Pass", "Coupon", 2000, 30, "#f7a8c8", "#8c7cff", ["coupons", "limited"]],
+      ];
+
+      let activeCategory = "All";
+      let query = "";
+      let selectedProduct = null;
+
+      function renderCategories() {
+        document.querySelector("#categories").innerHTML = categories.map((category) => `
+          <button class="${category === activeCategory ? "active" : ""}" data-category="${category}">${category}</button>
+        `).join("");
+      }
+
+      function productMatches(product) {
+        const category = activeCategory.toLowerCase();
+        const tags = product[6];
+        const text = product.join(" ").toLowerCase();
+        const categoryOk = activeCategory === "All" || tags.includes(category) || product[1].toLowerCase() === category;
+        const searchOk = !query || text.includes(query);
+        return categoryOk && searchOk;
+      }
+
+      function renderProducts() {
+        const filtered = products.filter(productMatches);
+        document.querySelector("#result-count").textContent = `${activeCategory} · ${filtered.length} items`;
+        document.querySelector("#product-grid").innerHTML = filtered.map((product) => {
+          const index = products.indexOf(product);
+          return `
+            <article class="product">
+              <div class="product-art" style="--a:${product[4]};--b:${product[5]}"></div>
+              <div class="product-info">
+                <strong>${product[0]}</strong>
+                <span>${product[1]} · ${product[2]} pt</span>
+              </div>
+              <div class="product-action">
+                <span class="stock">Stock ${product[3]}</span>
+                <button class="redeem" data-redeem="${index}">兑换</button>
+              </div>
+            </article>
+          `;
+        }).join("");
+      }
+
+      function openPurchase(index) {
+        selectedProduct = products[index];
+        document.querySelector("#purchase-title").textContent = selectedProduct[0];
+        document.querySelector("#purchase-meta").textContent = `${selectedProduct[1]} · ${selectedProduct[2]} pt · Stock ${selectedProduct[3]}`;
+        document.querySelector("#purchase-modal").classList.remove("hidden");
+      }
+
+      function closePurchase() {
+        document.querySelector("#purchase-modal").classList.add("hidden");
+      }
+
+      function toast(message) {
+        const node = document.querySelector("#toast");
+        node.textContent = message;
+        node.classList.add("show");
+        window.setTimeout(() => node.classList.remove("show"), 1800);
+      }
+
+      document.querySelector("#categories").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-category]");
+        if (!button) return;
+        activeCategory = button.dataset.category;
+        renderCategories();
+        renderProducts();
+      });
+
+      document.querySelector("#mall-search").addEventListener("input", (event) => {
+        query = event.target.value.trim().toLowerCase();
+        renderProducts();
+      });
+
+      document.querySelector("#product-grid").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-redeem]");
+        if (!button) return;
+        openPurchase(Number(button.dataset.redeem));
+      });
+
+      document.querySelector("#close-purchase").addEventListener("click", closePurchase);
+      document.querySelector("#confirm-redeem").addEventListener("click", () => {
+        if (!document.querySelector("#address-form").reportValidity()) return;
+        document.querySelector("#confirm-layer").classList.remove("hidden");
+      });
+      document.querySelector("#final-no").addEventListener("click", () => {
+        document.querySelector("#confirm-layer").classList.add("hidden");
+      });
+      document.querySelector("#final-yes").addEventListener("click", () => {
+        document.querySelector("#confirm-layer").classList.add("hidden");
+        closePurchase();
+        toast(`兑换完成：${selectedProduct?.[0] || "Reward"} 已加入寄送流程。`);
+      });
+
+      renderCategories();
+      renderProducts();
+    </script>
+  </body>
+</html>

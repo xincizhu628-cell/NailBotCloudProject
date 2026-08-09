@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Profile | Nailbot</title>
+    <link rel="stylesheet" href="styles.css?v=123" />
+    <style>
+      body { min-height: 100vh; padding: 28px; }
+      .profile-page { width: min(980px, 100%); margin: 0 auto; }
+      .profile-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
+      .profile-head h1 { margin: 0; font-size: clamp(2.2rem, 6vw, 4.2rem); }
+      .profile-card { border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.88); box-shadow: var(--shadow); overflow: hidden; }
+      .profile-table { width: 100%; border-collapse: collapse; }
+      .profile-table th, .profile-table td { padding: 15px 16px; border-bottom: 1px solid rgba(111,77,97,.12); text-align: left; vertical-align: top; }
+      .profile-table th { width: 220px; color: var(--muted); font-size: .82rem; text-transform: uppercase; }
+      .profile-table tr:last-child th, .profile-table tr:last-child td { border-bottom: 0; }
+      .profile-value { display: grid; gap: 4px; }
+      .profile-value span { font-weight: 650; }
+      .profile-value small { color: var(--muted); }
+      .profile-edit { min-height: 30px; padding: 0 12px; border: 0; border-radius: 7px; background: var(--pink-soft); color: var(--pink-strong); font-weight: 650; }
+      .profile-row-actions { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+      .profile-modal { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: rgba(45,35,48,.32); }
+      .profile-modal.hidden { display: none; }
+      .profile-modal-card { width: min(460px, 100%); padding: 20px; border-radius: 10px; background: #fff; box-shadow: 0 24px 80px rgba(45,35,48,.24); }
+      .profile-modal-card h2 { margin: 0 0 10px; }
+      .profile-modal-card label { display: grid; gap: 6px; margin: 12px 0; font-weight: 650; color: var(--muted); }
+      .profile-modal-card input { min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; }
+      .profile-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+      .profile-error { color: #b42352; font-size: .84rem; font-weight: 650; }
+      .profile-note { color: var(--muted); font-size: .84rem; }
+      @media (max-width: 640px) {
+        body { padding: 16px; }
+        .profile-head { align-items: flex-start; flex-direction: column; }
+        .profile-table, .profile-table tbody, .profile-table tr, .profile-table th, .profile-table td { display: block; width: 100%; }
+        .profile-table th { padding-bottom: 4px; }
+        .profile-table td { padding-top: 4px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="profile-page">
+      <header class="profile-head">
+        <div>
+          <p class="eyebrow">Nailbot</p>
+          <h1>Profile</h1>
+        </div>
+        <a class="profile-edit" href="index.html">Back to Nailbot</a>
+      </header>
+
+      <section class="profile-card">
+        <table class="profile-table" aria-label="Profile details">
+          <tbody id="profile-table-body">
+            <tr><td>Loading profile...</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <div class="profile-modal hidden" id="profile-contact-modal">
+      <div class="profile-modal-card">
+        <h2 id="contact-modal-title">Edit contact</h2>
+        <p class="profile-note" id="contact-modal-note"></p>
+        <div id="contact-step-old">
+          <label>
+            Current verification code
+            <input id="old-contact-code" autocomplete="one-time-code" placeholder="Enter code sent to current contact" />
+          </label>
+          <button class="profile-edit" id="send-old-code" type="button">Send code</button>
+        </div>
+        <div id="contact-step-new" class="hidden">
+          <label>
+            New contact
+            <input id="new-contact-value" placeholder="New email or phone" />
+          </label>
+          <label>
+            New verification code
+            <input id="new-contact-code" autocomplete="one-time-code" placeholder="Enter code sent to new contact" />
+          </label>
+          <button class="profile-edit" id="send-new-code" type="button">Send new code</button>
+        </div>
+        <p class="profile-error" id="contact-error"></p>
+        <p class="profile-note" id="contact-dev-note"></p>
+        <div class="profile-modal-actions">
+          <button class="ghost-btn" id="cancel-contact-edit" type="button">Cancel</button>
+          <button class="primary-btn" id="continue-contact-edit" type="button">Continue</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-modal hidden" id="third-party-modal">
+      <div class="profile-modal-card">
+        <h2>Third-party verification</h2>
+        <p class="profile-note" id="third-party-note">This will redirect to the platform verification page. Placeholder only.</p>
+        <div class="profile-modal-actions">
+          <button class="primary-btn" id="close-third-party" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const SESSION_KEY = "nailStudioUserAuthSessionV1";
+      let profileUser = null;
+      let editType = "";
+      let oldVerificationId = "";
+      let newVerificationId = "";
+
+      const $ = (selector) => document.querySelector(selector);
+      const mask = (value) => value || "Not bound";
+      const targetType = (value) => String(value || "").includes("@") ? "email" : "phone";
+
+      async function postJson(url, body) {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.ok === false) throw new Error(payload.error || "Request failed.");
+        return payload;
+      }
+
+      function renderProfile() {
+        const accounts = profileUser.thirdPartyAccounts || [];
+        const accountText = accounts.length
+          ? accounts.map((item) => `${item.platform}: ${item.username || item.platformUserId || "linked"} (${item.status || "linked"})`).join("<br>")
+          : "No third-party accounts linked";
+        $("#profile-table-body").innerHTML = `
+          ${row("Username", profileUser.username, "Public display name", "username")}
+          ${row("User ID", profileUser.userId, "Internal member/user identifier", "")}
+          ${row("Email", mask(profileUser.email), "Used for account verification and recovery", "email")}
+          ${row("Phone", mask(profileUser.phone), "Used for account verification and recovery", "phone")}
+          ${row("Third-party Accounts", accountText, "TikTok / Rednote / Instagram / Kuaishou bindings", "thirdParty")}
+        `;
+      }
+
+      function row(label, value, note, edit) {
+        return `
+          <tr>
+            <th>${label}</th>
+            <td>
+              <div class="profile-row-actions">
+                <div class="profile-value"><span>${value}</span><small>${note}</small></div>
+                ${edit ? `<button class="profile-edit" type="button" data-edit="${edit}">Edit</button>` : ""}
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+
+      async function loadProfile() {
+        const sessionId = localStorage.getItem(SESSION_KEY) || "";
+        if (!sessionId) {
+          $("#profile-table-body").innerHTML = `<tr><td>Please log in first.</td></tr>`;
+          return;
+        }
+        try {
+          const payload = await postJson("/api/user/profile", { sessionId });
+          profileUser = payload.user;
+          renderProfile();
+        } catch (error) {
+          $("#profile-table-body").innerHTML = `<tr><td>${error.message || "Failed to load profile."}</td></tr>`;
+        }
+      }
+
+      function openContactEdit(type) {
+        editType = type;
+        oldVerificationId = "";
+        newVerificationId = "";
+        $("#contact-error").textContent = "";
+        $("#contact-dev-note").textContent = "";
+        $("#old-contact-code").value = "";
+        $("#new-contact-value").value = "";
+        $("#new-contact-code").value = "";
+        $("#contact-step-old").classList.remove("hidden");
+        $("#contact-step-new").classList.add("hidden");
+        $("#continue-contact-edit").textContent = "Continue";
+        $("#contact-modal-title").textContent = type === "email" ? "Edit email" : "Edit phone";
+        $("#contact-modal-note").textContent = `First verify your current ${type}: ${profileUser[type] || "not bound"}.`;
+        $("#profile-contact-modal").classList.remove("hidden");
+      }
+
+      async function sendOldCode() {
+        const current = profileUser[editType];
+        if (!current) throw new Error(`No current ${editType} is bound.`);
+        const payload = await postJson("/api/user/request-code", {
+          sessionId: localStorage.getItem(SESSION_KEY),
+          target: current,
+          targetType: editType,
+          purpose: "profile_old_contact",
+        });
+        oldVerificationId = payload.verificationId;
+        $("#contact-dev-note").textContent = payload.delivery?.devCode ? `Development code: ${payload.delivery.devCode}` : "Verification code sent.";
+      }
+
+      async function sendNewCode() {
+        const nextValue = $("#new-contact-value").value.trim();
+        const payload = await postJson("/api/user/request-code", {
+          target: nextValue,
+          targetType: targetType(nextValue),
+          purpose: "profile_new_contact",
+        });
+        newVerificationId = payload.verificationId;
+        $("#contact-dev-note").textContent = payload.delivery?.devCode ? `Development code: ${payload.delivery.devCode}` : "New verification code sent.";
+      }
+
+      async function continueContactEdit() {
+        $("#contact-error").textContent = "";
+        try {
+          if ($("#contact-step-new").classList.contains("hidden")) {
+            if (!oldVerificationId) await sendOldCode();
+            if (!$("#old-contact-code").value.trim()) throw new Error("Enter the current verification code.");
+            $("#contact-step-old").classList.add("hidden");
+            $("#contact-step-new").classList.remove("hidden");
+            $("#continue-contact-edit").textContent = "Save";
+            return;
+          }
+          const nextValue = $("#new-contact-value").value.trim();
+          if (!newVerificationId) await sendNewCode();
+          const payload = await postJson("/api/user/update-contact", {
+            sessionId: localStorage.getItem(SESSION_KEY),
+            targetType: editType,
+            newTarget: nextValue,
+            oldVerificationId,
+            oldCode: $("#old-contact-code").value.trim(),
+            newVerificationId,
+            newCode: $("#new-contact-code").value.trim(),
+          });
+          profileUser = payload.user;
+          $("#profile-contact-modal").classList.add("hidden");
+          renderProfile();
+        } catch (error) {
+          $("#contact-error").textContent = error.message || "Update failed.";
+        }
+      }
+
+      document.addEventListener("click", async (event) => {
+        const edit = event.target.closest("[data-edit]");
+        if (edit) {
+          const type = edit.dataset.edit;
+          if (type === "email" || type === "phone") openContactEdit(type);
+          else if (type === "thirdParty") $("#third-party-modal").classList.remove("hidden");
+        }
+        if (event.target.closest("#cancel-contact-edit")) $("#profile-contact-modal").classList.add("hidden");
+        if (event.target.closest("#close-third-party")) $("#third-party-modal").classList.add("hidden");
+        if (event.target.closest("#send-old-code")) {
+          try { await sendOldCode(); } catch (error) { $("#contact-error").textContent = error.message; }
+        }
+        if (event.target.closest("#send-new-code")) {
+          try { await sendNewCode(); } catch (error) { $("#contact-error").textContent = error.message; }
+        }
+        if (event.target.closest("#continue-contact-edit")) continueContactEdit();
+      });
+
+      loadProfile();
+    </script>
+  </body>
+</html>

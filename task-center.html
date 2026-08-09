@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Task Center</title>
+    <style>
+      :root {
+        --bg: #fff7fb;
+        --panel: rgba(255, 255, 255, 0.88);
+        --ink: #2d2330;
+        --muted: #756b78;
+        --pink: #f7a8c8;
+        --pink-soft: #ffe4ef;
+        --pink-strong: #df5e93;
+        --violet: #8c7cff;
+        --mint: #85e6d5;
+        --line: rgba(111, 77, 97, 0.16);
+        --shadow: 0 24px 70px rgba(208, 106, 156, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 8% 12%, rgba(132, 230, 213, 0.2), transparent 24rem),
+          radial-gradient(circle at 88% 0%, rgba(247, 168, 200, 0.24), transparent 28rem),
+          linear-gradient(135deg, #fff9fc, var(--bg) 58%, #f7fbff);
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .page {
+        width: min(1280px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 44px;
+      }
+
+      .topline {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .back {
+        min-height: 42px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 14px;
+        border: 1px solid rgba(223, 94, 147, 0.24);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--pink-strong);
+        text-decoration: none;
+        font-weight: 900;
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        color: var(--pink-strong);
+        text-transform: uppercase;
+        font-size: 0.72rem;
+        font-weight: 900;
+        letter-spacing: 0;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 0;
+        font-size: clamp(2.1rem, 5vw, 4rem);
+      }
+
+      .task-layout {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 18px;
+        align-items: stretch;
+      }
+
+      .task-board,
+      .activity-board {
+        min-height: 72vh;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .task-board {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        overflow: hidden;
+      }
+
+      .board-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-end;
+        padding: 18px 18px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .board-head h2 {
+        margin-bottom: 0;
+      }
+
+      .task-count {
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: var(--pink-soft);
+        color: var(--pink-strong);
+        font-weight: 900;
+        white-space: nowrap;
+      }
+
+      .task-list {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+        padding: 14px;
+        overflow-y: auto;
+        scrollbar-color: var(--pink) transparent;
+      }
+
+      .task-item {
+        width: 100%;
+        display: grid;
+        gap: 8px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.84);
+        text-align: left;
+        color: var(--ink);
+        transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      .task-item:hover {
+        transform: translateY(-2px);
+        border-color: rgba(223, 94, 147, 0.34);
+        box-shadow: 0 14px 28px rgba(105, 75, 95, 0.1);
+      }
+
+      .task-item h3 {
+        margin: 0;
+        font-size: clamp(1rem, 1.4vw, 1.25rem);
+      }
+
+      .task-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 800;
+      }
+
+      .pill {
+        padding: 5px 8px;
+        border-radius: 999px;
+        background: #fff;
+        border: 1px solid var(--line);
+      }
+
+      .task-item p {
+        margin-bottom: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .activity-board {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        overflow: hidden;
+      }
+
+      .activity-scroll {
+        overflow: auto;
+        padding: 14px;
+        scrollbar-color: var(--pink) transparent;
+      }
+
+      .activity-inner {
+        width: max(100%, 680px);
+        display: grid;
+        grid-template-columns: repeat(2, 320px);
+        gap: 14px;
+        align-content: start;
+      }
+
+      .activity-card {
+        min-height: 220px;
+        display: grid;
+        align-content: end;
+        gap: 8px;
+        padding: 16px;
+        border-radius: 8px;
+        color: #fff;
+        text-decoration: none;
+        background:
+          radial-gradient(circle at 20% 18%, rgba(255,255,255,.86) 0 12px, transparent 13px),
+          linear-gradient(135deg, var(--a), var(--b));
+        box-shadow: 0 18px 34px rgba(85, 55, 75, 0.12);
+        transition: transform 0.18s ease;
+      }
+
+      .activity-card:hover {
+        transform: scale(1.04);
+      }
+
+      .activity-card strong {
+        font-size: 1.45rem;
+      }
+
+      .activity-card span {
+        opacity: 0.88;
+        font-weight: 800;
+      }
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: rgba(45, 35, 48, 0.38);
+        backdrop-filter: blur(10px);
+      }
+
+      .modal.hidden {
+        display: none;
+      }
+
+      .task-detail {
+        width: min(760px, calc(100vw - 32px));
+        max-height: calc(100vh - 40px);
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .modal-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: flex-start;
+        padding: 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .close {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 auto;
+        border: 1px solid rgba(223, 94, 147, 0.28);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--pink-strong);
+        font-weight: 900;
+      }
+
+      .modal-body {
+        padding: 18px;
+        overflow-y: auto;
+      }
+
+      .detail-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .detail-copy {
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .upload-trigger,
+      .submit-task {
+        min-height: 44px;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        font-weight: 900;
+        background: linear-gradient(135deg, var(--pink-strong), var(--violet));
+      }
+
+      .upload-trigger {
+        padding: 0 18px;
+      }
+
+      .submission-box {
+        display: none;
+        gap: 12px;
+        margin-top: 14px;
+        padding: 14px;
+        border: 1px solid rgba(223, 94, 147, 0.18);
+        border-radius: 8px;
+        background: #fff7fb;
+      }
+
+      .submission-box.active {
+        display: grid;
+      }
+
+      .file-drop {
+        min-height: 150px;
+        display: grid;
+        place-items: center;
+        gap: 10px;
+        padding: 18px;
+        border: 1px dashed rgba(223, 94, 147, 0.42);
+        border-radius: 8px;
+        background: #fff;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      .file-drop input {
+        max-width: 100%;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 180px;
+        resize: vertical;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        outline: 0;
+      }
+
+      .platform-select {
+        display: grid;
+        gap: 7px;
+      }
+
+      .platform-select label {
+        color: var(--muted);
+        font-size: 0.84rem;
+        font-weight: 900;
+      }
+
+      .platform-select select {
+        min-height: 44px;
+        width: min(360px, 100%);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0 12px;
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+        font-weight: 800;
+        outline: 0;
+      }
+
+      .submit-task {
+        width: min(260px, 100%);
+      }
+
+      @media (max-width: 900px) {
+        .topline {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .task-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .task-board,
+        .activity-board {
+          min-height: auto;
+        }
+
+        .task-list {
+          max-height: 62vh;
+        }
+
+        .activity-scroll {
+          max-height: 420px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="topline">
+        <div>
+          <p class="eyebrow">Member Mission Desk</p>
+          <h1>Task Center</h1>
+        </div>
+        <a class="back" href="index.html?view=member&member=task-list">Back to member center</a>
+      </header>
+
+      <section class="task-layout">
+        <article class="task-board">
+          <div class="board-head">
+            <div>
+              <p class="eyebrow">Latest high-value tasks</p>
+              <h2>Mission List</h2>
+            </div>
+            <span class="task-count" id="task-count">0 active</span>
+          </div>
+          <div class="task-list" id="task-list"></div>
+        </article>
+
+        <aside class="activity-board">
+          <div class="board-head">
+            <div>
+              <p class="eyebrow">Campaigns</p>
+              <h2>Activity Highlights</h2>
+            </div>
+            <span class="task-count">Fixed rail</span>
+          </div>
+          <div class="activity-scroll">
+            <div class="activity-inner" id="activity-list"></div>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <div class="modal hidden" id="task-modal">
+      <article class="task-detail">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow" id="detail-kicker">Task Detail</p>
+            <h2 id="detail-title">Task</h2>
+          </div>
+          <button class="close" id="close-task" type="button" aria-label="Close">X</button>
+        </div>
+        <div class="modal-body">
+          <div class="detail-tags" id="detail-tags"></div>
+          <p class="detail-copy" id="detail-copy"></p>
+          <button class="upload-trigger" id="open-submission" type="button">Upload</button>
+          <section class="submission-box" id="submission-box"></section>
+        </div>
+      </article>
+    </div>
+
+    <script>
+      const tasks = [
+        {
+          title: "Aurora Pink Pattern Upload",
+          valid: "2026-07-02 - 2026-07-06",
+          type: "Design Upload",
+          activity: "Aurora Creator Week",
+          intro: "Upload a soft pink AI manicure pattern or accessory icon for the July creator shelf.",
+          copy: "Create a polished nail pattern or tiny accessory element that can be used in the Design Gallery. Strong submissions should feel elegant, clean, and future-facing while staying printable on a nail surface.",
+          mode: "file",
+          platforms: ["rednote", "Instagram"],
+        },
+        {
+          title: "TikTok Cat Eye Caption Push",
+          valid: "2026-07-01 - 2026-07-04",
+          type: "Social Caption",
+          activity: "Magnetic Cat Eye Launch",
+          intro: "Write a short social caption for cat-eye press-on nail content.",
+          copy: "Submit one engaging caption that can be used with a short social video. The best copy should mention shimmer, quick wear, and the smart nail printer experience without sounding too formal.",
+          mode: "text",
+          platforms: ["tiktok", "Kuaishou"],
+        },
+        {
+          title: "Crystal Accent Accessory Set",
+          valid: "2026-07-03 - 2026-07-09",
+          type: "Design Upload",
+          activity: "Crystal Detail Challenge",
+          intro: "Submit small crystal, pearl, or foil-style accessory assets for nail design composition.",
+          copy: "Upload a transparent-background accessory design that can be placed on top of a manicure template. The asset should be readable at small size and suitable for elegant salon users.",
+          mode: "file",
+          platforms: ["rednote", "tiktok", "Instagram"],
+        },
+        {
+          title: "Rednote Salon Review Script",
+          valid: "2026-07-04 - 2026-07-08",
+          type: "Social Caption",
+          activity: "Salon Check-In Weekend",
+          intro: "Draft a Rednote-style review caption for a smart nail printer visit.",
+          copy: "Write an approachable post describing the offline printer experience, the design selection flow, and the final nail result. Keep it natural, warm, and shareable.",
+          mode: "text",
+          platforms: ["rednote"],
+        },
+        {
+          title: "Festival Coupon Visual",
+          valid: "2026-07-05 - 2026-07-12",
+          type: "Design Upload",
+          activity: "Mid-Year Benefit Drop",
+          intro: "Upload one coupon-themed nail icon or printable pattern for member reward promotion.",
+          copy: "The design should feel celebratory without becoming visually crowded. Pink, gold, mint, or chrome accents are recommended.",
+          mode: "file",
+          platforms: ["Kuaishou", "Instagram"],
+        },
+        {
+          title: "Instagram Share Text",
+          valid: "2026-07-06 - 2026-07-10",
+          type: "Social Caption",
+          activity: "Share Your Smart Manicure",
+          intro: "Write a concise Instagram caption for sharing a completed AI nail design.",
+          copy: "Submit a short, stylish caption that makes the nail design feel personal and easy to try. Mention that the design can be printed or saved as a template.",
+          mode: "text",
+          platforms: ["Instagram", "tiktok", "rednote"],
+        },
+      ];
+
+      const activities = [
+        ["Aurora Creator Week", "High reward design uploads", "#df5e93", "#8c7cff"],
+        ["Magnetic Cat Eye Launch", "Social heat bonus tasks", "#85e6d5", "#8c7cff"],
+        ["Crystal Detail Challenge", "Accessory assets wanted", "#f7a8c8", "#d8a640"],
+        ["Salon Check-In Weekend", "Offline visit content", "#ffb6d5", "#85e6d5"],
+        ["Mid-Year Benefit Drop", "Coupon visual campaign", "#d8a640", "#df5e93"],
+        ["Share Your Smart Manicure", "Template sharing rewards", "#8c7cff", "#f7a8c8"],
+      ];
+
+      let activeTask = null;
+
+      function renderTasks() {
+        document.querySelector("#task-count").textContent = `${tasks.length} active`;
+        document.querySelector("#task-list").innerHTML = tasks.map((task, index) => `
+          <button class="task-item" type="button" data-task="${index}">
+            <h3>${task.title}</h3>
+            <div class="task-meta">
+              <span class="pill">${task.valid}</span>
+              <span class="pill">${task.type}</span>
+            </div>
+            <p>${task.intro}</p>
+          </button>
+        `).join("");
+      }
+
+      function renderActivities() {
+        document.querySelector("#activity-list").innerHTML = activities.map((activity, index) => `
+          <a class="activity-card" href="campaign-detail.html?campaign=${index}" style="--a:${activity[2]};--b:${activity[3]}">
+            <span>Campaign ${index + 1}</span>
+            <strong>${activity[0]}</strong>
+            <p>${activity[1]}</p>
+          </a>
+        `).join("");
+      }
+
+      function openTask(index) {
+        activeTask = tasks[index];
+        document.querySelector("#detail-title").textContent = activeTask.title;
+        document.querySelector("#detail-kicker").textContent = activeTask.activity;
+        document.querySelector("#detail-tags").innerHTML = `
+          <span class="pill">${activeTask.valid}</span>
+          <span class="pill">${activeTask.type}</span>
+          <span class="pill">${activeTask.activity}</span>
+        `;
+        document.querySelector("#detail-copy").textContent = activeTask.copy;
+        document.querySelector("#submission-box").classList.remove("active");
+        document.querySelector("#submission-box").innerHTML = "";
+        document.querySelector("#task-modal").classList.remove("hidden");
+      }
+
+      function openSubmission() {
+        if (!activeTask) return;
+        const box = document.querySelector("#submission-box");
+        const platformOptions = (activeTask.platforms || ["rednote", "tiktok", "Kuaishou", "Instagram"])
+          .map((platform) => `<option value="${platform}">${platform}</option>`)
+          .join("");
+        const platformSelect = `
+          <div class="platform-select">
+            <label for="target-platform">Upload target platform</label>
+            <select id="target-platform">
+              <option value="" selected disabled>Select platform</option>
+              ${platformOptions}
+            </select>
+          </div>
+        `;
+        if (activeTask.mode === "file") {
+          box.innerHTML = `
+            <div class="file-drop">
+              <strong>Import local nail pattern / accessory design</strong>
+              <span>PNG, JPG, or WEBP sample file</span>
+              <input type="file" accept="image/png,image/jpeg,image/webp" />
+            </div>
+            ${platformSelect}
+            <button class="submit-task" type="button">Submit task</button>
+          `;
+        } else {
+          box.innerHTML = `
+            <textarea placeholder="Enter the social media caption for this task..."></textarea>
+            ${platformSelect}
+            <button class="submit-task" type="button">Submit task</button>
+          `;
+        }
+        box.classList.add("active");
+      }
+
+      document.querySelector("#task-list").addEventListener("click", (event) => {
+        const item = event.target.closest("[data-task]");
+        if (!item) return;
+        openTask(Number(item.dataset.task));
+      });
+
+      document.querySelector("#close-task").addEventListener("click", () => {
+        document.querySelector("#task-modal").classList.add("hidden");
+      });
+
+      document.querySelector("#open-submission").addEventListener("click", openSubmission);
+
+      document.querySelector("#submission-box").addEventListener("click", (event) => {
+        const submit = event.target.closest(".submit-task");
+        if (!submit) return;
+        const platform = document.querySelector("#target-platform");
+        if (platform && !platform.value) {
+          platform.focus();
+          platform.style.borderColor = "rgba(223, 94, 147, 0.72)";
+          return;
+        }
+        submit.textContent = `Submitted${platform?.value ? ` to ${platform.value}` : ""}`;
+        submit.disabled = true;
+      });
+
+      renderTasks();
+      renderActivities();
+    </script>
+  </body>
+</html>

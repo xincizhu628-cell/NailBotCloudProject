@@ -1,0 +1,2940 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nail Studio Admin</title>
+    <style>
+      :root {
+        --bg: #fff7fb;
+        --panel: rgba(255,255,255,.9);
+        --ink: #2d2330;
+        --muted: #756b78;
+        --line: rgba(111,77,97,.16);
+        --pink: #df5e93;
+        --pink-soft: #ffe4ef;
+        --violet: #8c7cff;
+        --mint: #85e6d5;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 10% 8%, rgba(133,230,213,.22), transparent 28rem),
+          radial-gradient(circle at 88% 0%, rgba(223,94,147,.22), transparent 30rem),
+          linear-gradient(135deg, #fff, var(--bg));
+      }
+
+      button, input, textarea, select { font: inherit; }
+      button { cursor: pointer; }
+
+      .admin-shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 18px;
+        padding: 22px 16px;
+        border-right: 1px solid var(--line);
+        background: rgba(255,255,255,.74);
+        backdrop-filter: blur(16px);
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        line-height: 1.08;
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        color: var(--pink);
+        text-transform: uppercase;
+        font-size: .72rem;
+        font-weight: 900;
+      }
+
+      .side-nav {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+        overflow: auto;
+        padding-right: 2px;
+      }
+
+      .nav-group {
+        display: grid;
+        gap: 6px;
+      }
+
+      .nav-group-title {
+        min-height: 34px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: .74rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        background: rgba(255, 209, 228, .24);
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .nav-group-title::after {
+        content: "▾";
+        font-size: .76rem;
+        transition: transform .18s ease;
+      }
+
+      .nav-group.collapsed .nav-group-title::after {
+        transform: rotate(-90deg);
+      }
+
+      .nav-group-items {
+        display: grid;
+        gap: 6px;
+      }
+
+      .nav-group.collapsed .nav-group-items {
+        display: none;
+      }
+
+      .nav-button {
+        min-height: 46px;
+        width: 100%;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--ink);
+        text-align: left;
+        padding: 0 12px;
+        font-weight: 900;
+      }
+
+      .nav-button.level-2 {
+        min-height: 40px;
+        padding-left: 18px;
+        font-size: .88rem;
+      }
+
+      .nav-button.level-3 {
+        min-height: 34px;
+        padding-left: 30px;
+        font-size: .8rem;
+        color: var(--muted);
+      }
+
+      .nav-button.active {
+        border-color: rgba(223,94,147,.28);
+        background: var(--pink-soft);
+        color: var(--pink);
+      }
+
+      .back {
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(223,94,147,.24);
+        border-radius: 8px;
+        color: var(--pink);
+        text-decoration: none;
+        font-weight: 900;
+        background: #fff;
+      }
+
+      .workspace {
+        padding: 26px;
+        min-width: 0;
+      }
+
+      .topline {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-end;
+        margin-bottom: 18px;
+      }
+
+      .topline h2 {
+        margin: 0;
+        font-size: clamp(1.8rem, 4vw, 3.3rem);
+      }
+
+      .topline-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .logout-btn {
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 14px;
+        border: 1px solid rgba(223,94,147,.22);
+        border-radius: 8px;
+        color: var(--pink);
+        font-weight: 900;
+        text-decoration: none;
+        background: #fff;
+      }
+
+      .admin-view {
+        display: none;
+      }
+
+      .admin-view.active {
+        display: block;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 24px 70px rgba(208,106,156,.14);
+      }
+
+      .panel-pad {
+        padding: 18px;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: minmax(300px, .9fr) minmax(0, 1.1fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .condition-reward-box {
+        grid-column: 1 / -1;
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        background: #fff8fb;
+      }
+
+      .condition-reward-head,
+      .condition-reward-row {
+        display: grid;
+        grid-template-columns: 1fr .7fr 1fr .7fr auto;
+        gap: 8px;
+        align-items: end;
+      }
+
+      .condition-reward-head {
+        color: var(--muted);
+        font-size: .72rem;
+        font-weight: 900;
+      }
+
+      .condition-reward-add,
+      .condition-reward-remove {
+        min-height: 38px;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        font-weight: 900;
+        background: linear-gradient(135deg, var(--pink), var(--violet));
+      }
+
+      .condition-reward-remove {
+        width: 38px;
+        background: #2d2330;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: .84rem;
+        font-weight: 900;
+      }
+
+      input, textarea, select {
+        min-height: 42px;
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        padding: 10px 12px;
+        outline: 0;
+      }
+
+      textarea {
+        min-height: 104px;
+        resize: vertical;
+      }
+
+      .wide { grid-column: 1 / -1; }
+
+      .submit {
+        width: 100%;
+        min-height: 48px;
+        margin-top: 14px;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        font-weight: 900;
+        background: linear-gradient(135deg, var(--pink), var(--violet));
+      }
+
+      .status {
+        margin: 12px 0 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .status.ok { color: #168a6b; }
+      .status.error { color: #c7355f; }
+
+      .current-image-box {
+        display: grid;
+        gap: 8px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff8fb;
+      }
+
+      .current-image-preview {
+        width: min(180px, 100%);
+        max-height: 180px;
+        object-fit: contain;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .current-image-note {
+        color: var(--muted);
+        font-size: .78rem;
+        font-weight: 800;
+      }
+
+      .current-image-code {
+        min-height: 72px;
+        font-family: Consolas, monospace;
+        font-size: .72rem;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: .58;
+      }
+
+      .drop {
+        min-height: 420px;
+        display: grid;
+        place-items: center;
+        gap: 12px;
+        padding: 18px;
+        border: 1px dashed rgba(223,94,147,.42);
+        border-radius: 8px;
+        background: #fff;
+        text-align: center;
+        overflow: hidden;
+      }
+
+      .drop img {
+        max-width: 100%;
+        max-height: 380px;
+        object-fit: contain;
+        border-radius: 8px;
+      }
+
+      .official-preview-grid {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .official-preview-grid figure {
+        position: relative;
+        margin: 0;
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: .76rem;
+        font-weight: 800;
+      }
+
+      .official-preview-grid img {
+        width: 100%;
+        aspect-ratio: 4 / 5;
+        max-height: none;
+        object-fit: contain;
+        border: 1px solid var(--line);
+        background: #fff8fb;
+      }
+
+      .official-preview-remove {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 28px;
+        height: 28px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(45, 35, 48, .82);
+        color: #fff;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .placeholder-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .placeholder-card {
+        min-height: 150px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .placeholder-card strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .placeholder-card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .product-form {
+        margin-top: 14px;
+      }
+
+      .size-stock-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .xlsx-box {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+        padding: 14px;
+        border: 1px dashed rgba(223,94,147,.34);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .taxonomy-shell {
+        display: grid;
+        gap: 16px;
+      }
+
+      .taxonomy-toolbar {
+        display: grid;
+        grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+        gap: 12px;
+        align-items: end;
+      }
+
+      .taxonomy-table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .taxonomy-table {
+        width: 100%;
+        min-width: 680px;
+        border-collapse: collapse;
+      }
+
+      .taxonomy-table th,
+      .taxonomy-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        font-size: .88rem;
+        vertical-align: middle;
+      }
+
+      .taxonomy-table th {
+        color: var(--muted);
+        font-size: .74rem;
+        text-transform: uppercase;
+      }
+
+      .taxonomy-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        min-width: 150px;
+      }
+
+      .status-toggle {
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid rgba(223,94,147,.26);
+        border-radius: 999px;
+        background: var(--pink-soft);
+        color: var(--pink);
+        font-weight: 850;
+      }
+
+      .status-toggle.off {
+        border-color: rgba(117,107,120,.22);
+        background: #f6f1f4;
+        color: var(--muted);
+      }
+
+      .danger-btn {
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid rgba(210,54,88,.22);
+        border-radius: 8px;
+        background: #fff5f7;
+        color: #c51f4a;
+        font-weight: 850;
+      }
+
+      .admin-data-page {
+        display: grid;
+        gap: 14px;
+      }
+
+      .admin-data-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: end;
+      }
+
+      .admin-filter-bar {
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) minmax(150px, 220px) minmax(150px, 220px);
+        gap: 10px;
+      }
+
+      .admin-filter-bar.product-filter-bar {
+        grid-template-columns: minmax(180px, 1fr) minmax(160px, 260px);
+      }
+
+      .product-admin-category-wrap {
+        position: relative;
+        align-self: end;
+      }
+
+      .product-admin-category-trigger {
+        width: 100%;
+        min-height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        cursor: pointer;
+        font-weight: 900;
+      }
+
+      .product-admin-category-trigger small {
+        min-width: 0;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: .74rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .product-admin-filter-popover {
+        position: absolute;
+        z-index: 30;
+        top: calc(100% + 8px);
+        right: 0;
+        width: min(480px, calc(100vw - 28px));
+        display: grid;
+        gap: 14px;
+        padding: 16px;
+        border: 1px solid rgba(223, 94, 147, .22);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, .98);
+        box-shadow: 0 22px 70px rgba(69, 45, 65, .18);
+      }
+
+      .product-admin-filter-popover.hidden {
+        display: none;
+      }
+
+      .product-admin-filter-row {
+        display: grid;
+        gap: 8px;
+      }
+
+      .product-admin-filter-row label {
+        color: var(--muted);
+        font-size: .78rem;
+        font-weight: 900;
+      }
+
+      .product-admin-filter-row select {
+        width: 100%;
+        min-height: 40px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        font-weight: 800;
+      }
+
+      .product-admin-filter-pick {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 120px;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .product-admin-filter-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .product-admin-filter-options button {
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--muted);
+        cursor: pointer;
+        font-weight: 850;
+      }
+
+      .product-admin-filter-options button.active {
+        border-color: rgba(219, 78, 137, .5);
+        background: #fff0f6;
+        color: var(--pink-strong);
+      }
+
+      .create-btn,
+      .back-list-btn {
+        min-height: 42px;
+        padding: 0 16px;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        font-weight: 900;
+        background: linear-gradient(135deg, var(--pink), var(--violet));
+      }
+
+      .back-list-btn {
+        width: auto;
+        margin: 0 0 14px;
+        background: #2d2330;
+      }
+
+      .model-create-panel {
+        margin-bottom: 14px;
+        padding: 14px;
+        border: 1px solid rgba(223,94,147,.18);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .model-create-panel h4 {
+        margin: 0 0 12px;
+      }
+
+      .admin-record-table {
+        width: 100%;
+        min-width: 760px;
+        border-collapse: collapse;
+      }
+
+      .admin-record-table th,
+      .admin-record-table td {
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        font-size: .88rem;
+      }
+
+      .admin-record-table th {
+        color: var(--muted);
+        font-size: .74rem;
+        text-transform: uppercase;
+      }
+
+      .table-image-thumb {
+        width: 54px;
+        height: 54px;
+        object-fit: cover;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        display: block;
+      }
+
+      .table-image-empty {
+        color: var(--muted);
+        font-size: .78rem;
+        font-weight: 800;
+      }
+
+      .table-pagination {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+        padding-top: 12px;
+        color: var(--muted);
+        font-size: .82rem;
+        font-weight: 800;
+      }
+
+      .table-pagination button {
+        min-height: 30px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 7px;
+        color: #fff;
+        font-weight: 800;
+        background: #6e5a73;
+      }
+
+      .table-pagination button:disabled {
+        opacity: .38;
+        cursor: not-allowed;
+      }
+
+      .row-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .row-action {
+        min-height: 32px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 7px;
+        font-weight: 800;
+        color: #fff;
+        background: #6e5a73;
+      }
+
+      .row-action.edit {
+        background: linear-gradient(135deg, var(--pink), var(--violet));
+      }
+
+      .row-action.detail {
+        background: #7b6ef6;
+      }
+
+      .row-action.delete {
+        background: #2d2330;
+      }
+
+      .user-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin: 12px 0 18px;
+      }
+
+      .user-detail-item {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: #fff8fb;
+      }
+
+      .user-detail-item span {
+        display: block;
+        color: var(--muted);
+        font-size: .72rem;
+        font-weight: 900;
+        margin-bottom: 4px;
+      }
+
+      .user-action-list {
+        display: grid;
+        gap: 8px;
+        max-height: 300px;
+        overflow: auto;
+        padding-right: 4px;
+      }
+
+      .user-action-row {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: #fff;
+      }
+
+      .user-action-row strong {
+        display: block;
+        color: var(--ink);
+      }
+
+      .user-action-row p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: .78rem;
+      }
+
+      .admin-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: rgba(34, 22, 39, .36);
+      }
+
+      .admin-modal.hidden {
+        display: none;
+      }
+
+      .admin-modal-card {
+        width: min(760px, 94vw);
+        max-height: min(760px, 88vh);
+        overflow: auto;
+        padding: 20px;
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 24px 70px rgba(74, 38, 73, .24);
+      }
+
+      .admin-create-modal-card {
+        width: min(920px, 96vw);
+      }
+
+      .admin-create-modal-body {
+        display: grid;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .admin-create-modal-body .admin-create-content,
+      .admin-create-modal-body .model-create-panel {
+        display: block;
+      }
+
+      .admin-create-modal-body > .panel {
+        box-shadow: none;
+      }
+
+      .admin-modal-head,
+      .admin-modal-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .admin-modal-head h3 {
+        margin: 0;
+      }
+
+      .admin-modal-actions {
+        justify-content: flex-end;
+        margin-top: 16px;
+      }
+
+      .cancel-btn,
+      .confirm-btn {
+        min-height: 40px;
+        padding: 0 16px;
+        border: 0;
+        border-radius: 8px;
+        font-weight: 900;
+      }
+
+      .cancel-btn {
+        background: #f4edf3;
+        color: var(--ink);
+      }
+
+      .confirm-btn {
+        color: #fff;
+        background: linear-gradient(135deg, var(--pink), var(--violet));
+      }
+
+      .admin-create-content {
+        display: none;
+      }
+
+      .admin-view.create-mode .admin-data-page {
+        display: none;
+      }
+
+      .admin-view.create-mode .admin-create-content {
+        display: block;
+      }
+
+      .admin-view:not(.create-mode) > .panel > .back-list-btn {
+        display: none;
+      }
+
+      #admin-asset-data:not(.create-mode) #asset-taxonomy-form,
+      #admin-topic-tags:not(.create-mode) #social-taxonomy-form {
+        display: none;
+      }
+
+      #admin-asset-data.create-mode #asset-taxonomy-form,
+      #admin-topic-tags.create-mode #social-taxonomy-form {
+        display: grid;
+      }
+
+      #admin-event .admin-create-content.model-only-create > :not(.back-list-btn):not(.model-create-panel),
+      #admin-task .admin-create-content.model-only-create > :not(.back-list-btn):not(.model-create-panel),
+      #admin-community .admin-create-content.model-only-create > :not(.back-list-btn):not(.model-create-panel) {
+        display: none;
+      }
+
+      @media (max-width: 900px) {
+        .admin-shell {
+          grid-template-columns: 188px minmax(0, 1fr);
+        }
+
+        .sidebar {
+          position: sticky;
+          height: 100vh;
+          padding: 16px 10px;
+        }
+
+        .brand h1 {
+          font-size: 1.08rem;
+        }
+
+        .nav-button {
+          min-height: 42px;
+          padding: 0 8px;
+          font-size: .86rem;
+        }
+
+        .workspace {
+          padding: 18px;
+        }
+
+        .two-col,
+        .form-grid,
+        .admin-filter-bar,
+        .placeholder-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .admin-shell {
+          grid-template-columns: 148px minmax(0, 1fr);
+        }
+
+        .sidebar {
+          padding: 12px 8px;
+        }
+
+        .brand .eyebrow {
+          display: none;
+        }
+
+        .brand h1 {
+          font-size: .92rem;
+        }
+
+        .nav-button {
+          min-height: 38px;
+          font-size: .76rem;
+          line-height: 1.2;
+        }
+
+        .back {
+          min-height: 36px;
+          font-size: .72rem;
+          padding: 0 6px;
+        }
+
+        .workspace {
+          padding: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="admin-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <p class="eyebrow">Business Admin</p>
+          <h1>AI Nail Studio B-side</h1>
+        </div>
+        <nav class="side-nav" aria-label="Admin navigation">
+          <div class="nav-group" data-nav-group>
+            <button class="nav-group-title" type="button" data-nav-toggle aria-expanded="true">活动/任务管理</button>
+            <div class="nav-group-items">
+              <button class="nav-button level-2 active" data-admin-view="event">活动管理</button>
+              <button class="nav-button level-3" data-admin-view="event-participation">活动参与管理</button>
+              <button class="nav-button level-2" data-admin-view="task">任务管理</button>
+              <button class="nav-button level-3" data-admin-view="task-records">任务记录管理</button>
+            </div>
+          </div>
+          <div class="nav-group collapsed" data-nav-group>
+            <button class="nav-group-title" type="button" data-nav-toggle aria-expanded="false">素材管理</button>
+            <div class="nav-group-items">
+              <button class="nav-button level-2" data-admin-view="promo-assets">宣传素材库</button>
+              <button class="nav-button level-2" data-admin-view="promotion">优惠管理</button>
+              <button class="nav-button level-2" data-admin-view="asset-data">素材数据管理</button>
+              <button class="nav-button level-2" data-admin-view="topic-tags">话题标签管理</button>
+            </div>
+          </div>
+          <div class="nav-group collapsed" data-nav-group>
+            <button class="nav-group-title" type="button" data-nav-toggle aria-expanded="false">模板管理</button>
+            <div class="nav-group-items">
+              <button class="nav-button level-2" data-admin-view="official">官方模板管理</button>
+              <button class="nav-button level-2" data-admin-view="community">社区模板管理</button>
+            </div>
+          </div>
+          <div class="nav-group collapsed" data-nav-group>
+            <button class="nav-group-title" type="button" data-nav-toggle aria-expanded="false">用户管理</button>
+            <div class="nav-group-items">
+              <button class="nav-button level-2" data-admin-view="users">用户管理</button>
+              <button class="nav-button level-2" data-admin-view="user-comments">用户评论管理</button>
+            </div>
+          </div>
+          <div class="nav-group collapsed" data-nav-group>
+            <button class="nav-group-title" type="button" data-nav-toggle aria-expanded="false">交易管理</button>
+            <div class="nav-group-items">
+              <button class="nav-button level-2" data-admin-view="product">商品管理</button>
+              <button class="nav-button level-2" data-admin-view="orders">订单记录</button>
+              <button class="nav-button level-2" data-admin-view="reward-orders">积分兑换记录</button>
+            </div>
+          </div>
+          <div class="nav-group collapsed" data-nav-group>
+            <button class="nav-group-title" type="button" data-nav-toggle aria-expanded="false">设备管理</button>
+            <div class="nav-group-items">
+              <button class="nav-button level-2" data-admin-view="device-info">设备信息</button>
+              <button class="nav-button level-2" data-admin-view="print-jobs">打印记录</button>
+            </div>
+          </div>
+        </nav>
+        <a class="back" href="index.html">Back to C-side studio</a>
+      </aside>
+
+      <section class="workspace">
+        <header class="topline">
+          <div>
+            <p class="eyebrow" id="admin-kicker">Campaign</p>
+            <h2 id="admin-title">活动管理</h2>
+          </div>
+          <div class="topline-actions">
+            <a class="logout-btn" href="/admin-create-account.html">Create account</a>
+            <button class="logout-btn" type="button" id="admin-logout">Logout</button>
+          </div>
+        </header>
+
+        <section class="admin-view active" id="admin-event">
+          <article class="panel panel-pad">
+            <p class="eyebrow">Create Event</p>
+            <h3>活动基础信息</h3>
+            <div class="form-grid">
+              <label>Event name<input placeholder="Aurora Creator Week" /></label>
+              <label>Event type
+                <select>
+                  <option>Design campaign</option>
+                  <option>Social campaign</option>
+                  <option>Reward campaign</option>
+                  <option>Offline salon campaign</option>
+                </select>
+              </label>
+              <label>Start date<input type="date" /></label>
+              <label>Expiry date<input type="date" /></label>
+              <label class="wide">Event title<input placeholder="High reward design uploads for creators" /></label>
+              <label class="wide">Event content<textarea placeholder="Activity rules, reward explanation, and campaign copy."></textarea></label>
+            </div>
+            <button class="submit" type="button">Save event draft</button>
+            <p class="status">Frontend frame only. Database save will be connected next.</p>
+          </article>
+        </section>
+
+        <section class="admin-view" id="admin-task">
+          <article class="panel panel-pad">
+            <p class="eyebrow">Create Task</p>
+            <h3>任务基础信息</h3>
+            <div class="form-grid">
+              <label>Task name<input placeholder="Aurora Pink Pattern Upload" /></label>
+              <label>Bind event<input placeholder="event_aurora_week" /></label>
+              <label>Task type
+                <select>
+                  <option>Design upload</option>
+                  <option>Social caption</option>
+                  <option>External link</option>
+                  <option>Community action</option>
+                </select>
+              </label>
+              <label>Submission type
+                <select>
+                  <option>file</option>
+                  <option>text</option>
+                  <option>url</option>
+                </select>
+              </label>
+              <label>Reward points<input type="number" value="300" /></label>
+              <label>Expiry date<input type="date" /></label>
+              <label class="wide">Allowed platforms<input placeholder="rednote,tiktok,Kuaishou,Instagram" /></label>
+              <label class="wide">Task content<textarea placeholder="Detailed task intro, campaign copy, and submission rules."></textarea></label>
+            </div>
+            <button class="submit" type="button">Save task draft</button>
+            <p class="status">Frontend frame only. Database save will be connected next.</p>
+          </article>
+        </section>
+
+        <section class="admin-view" id="admin-product">
+          <article class="panel panel-pad">
+            <p class="eyebrow">Product Import</p>
+            <h3>商品管理</h3>
+            <div class="form-grid">
+              <label>商品数据模型
+                <select id="product-kind">
+                  <option value="product">正式商品</option>
+                  <option value="reward">积分商品</option>
+                </select>
+              </label>
+              <label>导入方式
+                <select id="product-source">
+                  <option value="single">单条输入</option>
+                  <option value="xlsx">XLSX批量导入</option>
+                </select>
+              </label>
+            </div>
+
+            <form id="formal-product-form" class="product-form">
+              <div class="form-grid">
+                <label>Product ID<input name="product_id" placeholder="P-1001" /></label>
+                <label>Product name<input name="product_name" required placeholder="Aurora Pink Almond Set" /></label>
+                <label>Product type
+                  <select name="product_type">
+                    <option value="穿戴甲">穿戴甲</option>
+                    <option value="打印甲">打印甲</option>
+                    <option value="配件">配件</option>
+                  </select>
+                </label>
+                <label>Unit price<input name="unit_price" type="number" step="0.01" value="0" /></label>
+                <label>Nail shape<select name="nail_shape" data-product-taxonomy="shapes"></select></label>
+                <div class="wide size-stock-grid">
+                  <label>Stock S<input name="stock_s" type="number" min="0" value="0" /></label>
+                  <label>Stock M<input name="stock_m" type="number" min="0" value="0" /></label>
+                  <label>Stock L<input name="stock_l" type="number" min="0" value="0" /></label>
+                  <label>Stock XL<input name="stock_xl" type="number" min="0" value="0" /></label>
+                </div>
+                <label>Product image<input name="image_file" type="file" accept="image/*" /></label>
+                <label>是否精品
+                  <select name="is_featured">
+                    <option value="0">No</option>
+                    <option value="1">Yes</option>
+                  </select>
+                </label>
+                <label>支持取货方式
+                  <select name="pickup_method">
+                    <option value="both">both</option>
+                    <option value="pickup">自取</option>
+                    <option value="shipping">邮寄</option>
+                  </select>
+                </label>
+                <label>Status
+                  <select name="status">
+                    <option value="active">Active</option>
+                    <option value="draft">Draft</option>
+                    <option value="hidden">Hidden</option>
+                  </select>
+                </label>
+                <label class="wide">Style<select name="style_tags" data-product-taxonomy="styles"></select></label>
+                <label class="wide">Image URL<input name="image_url" placeholder="https://example.com/product.png" /></label>
+                <label class="wide">Product info<textarea name="product_info" placeholder="Product detail shown on the product page."></textarea></label>
+              </div>
+            </form>
+
+            <form id="reward-product-form" class="product-form hidden">
+              <div class="form-grid">
+                <label>Reward ID<input name="reward_id" placeholder="reward_aurora_pattern" /></label>
+                <label>Reward name<input name="reward_name" required placeholder="Limited Aurora Pattern" /></label>
+                <label>Reward type
+                  <select name="reward_type">
+                    <option value="coupon">coupon</option>
+                    <option value="digital_template">digital_template</option>
+                    <option value="physical_goods">physical_goods</option>
+                    <option value="benefit">benefit</option>
+                  </select>
+                </label>
+                <label>Point cost<input name="unit_point_cost" type="number" value="0" /></label>
+                <div class="wide size-stock-grid">
+                  <label>Stock S<input name="stock_s" type="number" min="0" value="0" /></label>
+                  <label>Stock M<input name="stock_m" type="number" min="0" value="0" /></label>
+                  <label>Stock L<input name="stock_l" type="number" min="0" value="0" /></label>
+                  <label>Stock XL<input name="stock_xl" type="number" min="0" value="0" /></label>
+                </div>
+                <label>Reward image<input name="image_file" type="file" accept="image/*" /></label>
+                <label>是否精品
+                  <select name="is_featured">
+                    <option value="0">No</option>
+                    <option value="1">Yes</option>
+                  </select>
+                </label>
+                <label>支持取货方式
+                  <select name="pickup_method">
+                    <option value="pickup">自取</option>
+                    <option value="shipping">邮寄</option>
+                    <option value="both">both</option>
+                  </select>
+                </label>
+                <label>Status
+                  <select name="status">
+                    <option value="active">Active</option>
+                    <option value="draft">Draft</option>
+                    <option value="hidden">Hidden</option>
+                  </select>
+                </label>
+                <label class="wide">Image URL<input name="image_url" placeholder="https://example.com/reward.png" /></label>
+                <label class="wide">Reward info<textarea name="reward_info" placeholder="Reward detail shown in the reward mall."></textarea></label>
+              </div>
+            </form>
+
+            <section class="xlsx-box hidden" id="xlsx-box">
+              <label>XLSX file
+                <input id="product-xlsx" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+              </label>
+              <p class="status">
+                正式商品表头可用：product_id, product_name, product_type, unit_price, product_info, image_url, image_base64, style_tags, nail_shape, stock_s, stock_m, stock_l, stock_xl, is_featured, pickup_method, status。
+                积分商品表头可用：reward_id, reward_name, reward_type, unit_point_cost, reward_info, image_url, image_base64, stock_s, stock_m, stock_l, stock_xl, is_featured, pickup_method, status。
+              </p>
+            </section>
+
+            <button class="submit" id="import-product-submit" type="button">Import product data</button>
+            <p class="status" id="product-import-status">Choose product model and input method.</p>
+          </article>
+        </section>
+
+        <section class="admin-view" id="admin-asset-data">
+          <article class="panel panel-pad taxonomy-shell">
+            <p class="eyebrow">Asset Taxonomy</p>
+            <h3>素材数据管理</h3>
+            <div class="taxonomy-toolbar">
+              <label>数据表
+                <select id="asset-taxonomy-table" data-taxonomy-select="asset">
+                  <option value="styles">Styles / 风格分类</option>
+                  <option value="shapes">Shapes / 甲形分类</option>
+                  <option value="materials">Materials / 材质分类</option>
+                </select>
+              </label>
+              <form class="form-grid" id="asset-taxonomy-form">
+                <label>名称<input name="name" required placeholder="Elegant" /></label>
+                <label class="wide" data-taxonomy-image-field>Material image<input name="image" placeholder="assets/materials/material-123.png" /></label>
+                <button class="submit" type="submit">新增/更新</button>
+              </form>
+            </div>
+            <div class="taxonomy-table-wrap">
+              <table class="taxonomy-table">
+                <thead id="asset-taxonomy-head"></thead>
+                <tbody id="asset-taxonomy-body"></tbody>
+              </table>
+            </div>
+            <p class="status" id="asset-taxonomy-status">Loading taxonomy data...</p>
+          </article>
+        </section>
+
+        <section class="admin-view" id="admin-promo-assets">
+          <article class="panel panel-pad">
+            <p class="eyebrow">Promotional Assets</p>
+            <h3>宣传素材库管理</h3>
+            <p class="status">Use Create to add promotional images by URL or base64. The generated image ID can be selected in event and task creation.</p>
+          </article>
+        </section>
+
+        <section class="admin-view" id="admin-promotion">
+          <article class="panel panel-pad">
+            <p class="eyebrow">Promotion</p>
+            <h3>优惠管理</h3>
+            <p class="status">创建、编辑、删除用户可领取或已发放的优惠券数据。</p>
+          </article>
+        </section>
+
+        <section class="admin-view" id="admin-topic-tags">
+          <article class="panel panel-pad taxonomy-shell">
+            <p class="eyebrow">Topic & Tag Taxonomy</p>
+            <h3>话题标签管理</h3>
+            <div class="taxonomy-toolbar">
+              <label>数据表
+                <select id="social-taxonomy-table" data-taxonomy-select="social">
+                  <option value="topics">Topics / 话题</option>
+                  <option value="tags">Tags / 标签</option>
+                </select>
+              </label>
+              <form class="form-grid" id="social-taxonomy-form">
+                <label>名称<input name="name" required placeholder="AI Design" /></label>
+                <button class="submit" type="submit">新增/更新</button>
+              </form>
+            </div>
+            <div class="taxonomy-table-wrap">
+              <table class="taxonomy-table">
+                <thead id="social-taxonomy-head"></thead>
+                <tbody id="social-taxonomy-body"></tbody>
+              </table>
+            </div>
+            <p class="status" id="social-taxonomy-status">Loading taxonomy data...</p>
+          </article>
+        </section>
+
+        <section class="admin-view" id="admin-official">
+          <div class="two-col">
+            <article class="panel panel-pad">
+              <p class="eyebrow">Template Images</p>
+              <h3>Upload official template images</h3>
+              <div class="drop" id="drop">
+                <div id="empty-state">
+                  <strong>Select up to 6 images</strong>
+                  <p>PNG, JPG, or WEBP. The first image will be used as the official template cover.</p>
+                  <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp" multiple />
+                </div>
+                <div class="official-preview-grid" id="preview" hidden></div>
+              </div>
+            </article>
+
+            <article class="panel panel-pad">
+              <p class="eyebrow">Template Metadata</p>
+              <h3>Official template library data</h3>
+              <form id="template-form">
+                <div class="form-grid">
+                  <label>Template name<input name="templateName" required placeholder="Pearl Circuit" /></label>
+                  <label>Template title<input name="templateTitle" placeholder="Pearl Circuit Long Oval" /></label>
+                  <label>Official gallery
+                    <select name="galleryId">
+                      <option value="ogallery_factory_001">Official Factory Gallery</option>
+                      <option value="ogallery_ai_featured_001">Official AI Featured Gallery</option>
+                    </select>
+                  </label>
+                  <label>Design type
+                    <select name="designType">
+                      <option value="nail">Nail template</option>
+                      <option value="accessory">Accessory</option>
+                    </select>
+                  </label>
+                  <label>Template type
+                    <select name="templateType">
+                      <option value="design">Design</option>
+                      <option value="draft">Draft</option>
+                      <option value="asset">Asset</option>
+                    </select>
+                  </label>
+                  <label>Nail shape
+                    <select name="nailShape">
+                      <option value="long-oval">Long Oval</option>
+                      <option value="short-oval">Short Oval</option>
+                      <option value="short-square">Short Square</option>
+                      <option value="medium-square">Medium Square</option>
+                      <option value="squoval">Squoval</option>
+                      <option value="short-round">Short Round</option>
+                      <option value="almond">Almond</option>
+                      <option value="medium-almond">Medium Almond</option>
+                      <option value="short-almond">Short Almond</option>
+                    </select>
+                  </label>
+                  <label>Material type
+                    <select name="materialType">
+                      <option value="m123">123 White Nail</option>
+                      <option value="m124">124 Regular Cat Eye</option>
+                      <option value="m125">125 Gilded Nail</option>
+                      <option value="m126">126 Rhinestone Nail</option>
+                      <option value="m127">127 Cat Eye Nail</option>
+                      <option value="m128">128 Gilded Nail</option>
+                      <option value="m130">130 Rhinestone Cat Eye</option>
+                    </select>
+                  </label>
+                  <label>Status
+                    <select name="status">
+                      <option value="active">Active</option>
+                      <option value="draft">Draft</option>
+                      <option value="hidden">Hidden</option>
+                    </select>
+                  </label>
+                  <label>Visibility
+                    <select name="visibility">
+                      <option value="public">Public</option>
+                      <option value="private">Private</option>
+                    </select>
+                  </label>
+                  <label>Sort order<input name="sortOrder" type="number" value="0" /></label>
+                  <label class="wide">Description<textarea name="description" placeholder="Describe this template for the official gallery."></textarea></label>
+                  <label>Style categories<input name="styleCategories" placeholder="elegant,tech,minimal" /></label>
+                  <label>Material categories<input name="materialCategories" placeholder="white-nail,cat-eye" /></label>
+                  <label>Topic tags<input name="topicTags" placeholder="Aurora,AI Design" /></label>
+                  <label>Tags<input name="tags" placeholder="pink,pearl,printable" /></label>
+                  <label>Event ID<input name="eventId" placeholder="event_aurora_week" /></label>
+                  <label>Published date<input name="publishedAt" type="date" /></label>
+                </div>
+                <button class="submit" type="submit">Upload to official template library</button>
+                <p class="status" id="status">Waiting for image and metadata.</p>
+              </form>
+            </article>
+          </div>
+        </section>
+
+        <section class="admin-view" id="admin-community">
+          <article class="panel panel-pad">
+            <p class="eyebrow">Community Templates</p>
+            <h3>社区模板库管理</h3>
+            <div class="admin-create-content">
+              <div class="placeholder-grid">
+              <div class="placeholder-card"><strong>Pending Review</strong><p>Review newly uploaded community templates.</p></div>
+              <div class="placeholder-card"><strong>Featured Templates</strong><p>Promote selected user templates to campaign shelves.</p></div>
+              <div class="placeholder-card"><strong>Reports</strong><p>Handle hidden, reported, or duplicate templates.</p></div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="admin-view" id="admin-users">
+          <article class="panel panel-pad">
+            <p class="eyebrow">Users</p>
+            <h3>用户管理</h3>
+            <div class="placeholder-grid">
+              <div class="placeholder-card"><strong>Member Search</strong><p>Search users by ID, phone, third-party account, or username.</p></div>
+              <div class="placeholder-card"><strong>Points & Rewards</strong><p>Inspect member points, coupons, rewards, and achievements.</p></div>
+              <div class="placeholder-card"><strong>Account Status</strong><p>Manage account visibility, safety status, and admin notes.</p></div>
+            </div>
+          </article>
+        </section>
+
+        <section class="admin-view" id="admin-orders"></section>
+        <section class="admin-view" id="admin-reward-orders"></section>
+        <section class="admin-view" id="admin-task-records"></section>
+        <section class="admin-view" id="admin-event-participation"></section>
+        <section class="admin-view" id="admin-user-comments"></section>
+        <section class="admin-view" id="admin-device-info"></section>
+        <section class="admin-view" id="admin-print-jobs"></section>
+      </section>
+    </main>
+
+    <section class="admin-modal hidden" id="admin-create-modal" aria-hidden="true">
+      <div class="admin-modal-card admin-create-modal-card">
+        <div class="admin-modal-head">
+          <h3 id="admin-create-title">创建数据</h3>
+          <button class="cancel-btn" type="button" data-admin-create-cancel>关闭</button>
+        </div>
+        <div class="admin-create-modal-body" id="admin-create-body"></div>
+        <div id="admin-create-stash" hidden></div>
+      </div>
+    </section>
+
+    <section class="admin-modal hidden" id="admin-edit-modal" aria-hidden="true">
+      <div class="admin-modal-card">
+        <div class="admin-modal-head">
+          <h3 id="admin-edit-title">编辑数据</h3>
+          <button class="cancel-btn" type="button" data-admin-edit-cancel>关闭</button>
+        </div>
+        <form id="admin-edit-form">
+          <div class="form-grid" id="admin-edit-fields"></div>
+          <div class="admin-modal-actions">
+            <button class="cancel-btn" type="button" data-admin-edit-cancel>取消</button>
+            <button class="confirm-btn" type="submit">保存</button>
+          </div>
+          <p class="status" id="admin-edit-status"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="admin-modal hidden" id="admin-delete-modal" aria-hidden="true">
+      <div class="admin-modal-card">
+        <h3>确认删除？</h3>
+        <p class="status" id="admin-delete-status">删除后该条数据会从数据库中移除。</p>
+        <div class="admin-modal-actions">
+          <button class="cancel-btn" type="button" data-admin-delete-cancel>否</button>
+          <button class="confirm-btn" type="button" data-admin-delete-confirm>是</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="admin-modal hidden" id="admin-user-detail-modal" aria-hidden="true">
+      <div class="admin-modal-card">
+        <div class="admin-modal-head">
+          <h3>用户详情</h3>
+          <button class="cancel-btn" type="button" data-user-detail-close>关闭</button>
+        </div>
+        <div id="admin-user-detail-body"></div>
+      </div>
+    </section>
+
+    <script>
+      const titles = {
+        event: ["Campaign", "活动管理"],
+        task: ["Mission", "任务管理"],
+        product: ["Products", "商品管理"],
+        "promo-assets": ["Promotional Assets", "宣传素材库"],
+        promotion: ["Promotion", "优惠管理"],
+        "asset-data": ["Asset Taxonomy", "素材数据管理"],
+        "topic-tags": ["Topic & Tag Taxonomy", "话题标签管理"],
+        official: ["Official Templates", "官方模板管理"],
+        community: ["Community Gallery", "社区模板管理"],
+        users: ["Users", "用户管理"],
+        orders: ["Order Records", "订单记录"],
+        "reward-orders": ["Reward Orders", "积分兑换记录"],
+        "task-records": ["Task Records", "任务记录管理"],
+        "event-participation": ["Event Participation", "活动参与管理"],
+        "user-comments": ["User Comments", "用户评论管理"],
+        "device-info": ["Device Info", "设备信息"],
+        "print-jobs": ["Print Jobs", "打印记录"],
+      };
+
+      document.querySelector(".side-nav").addEventListener("click", (event) => {
+        const toggle = event.target.closest("[data-nav-toggle]");
+        if (toggle) {
+          const group = toggle.closest("[data-nav-group]");
+          const collapsed = !group.classList.toggle("collapsed");
+          toggle.setAttribute("aria-expanded", collapsed ? "true" : "false");
+          return;
+        }
+        const button = event.target.closest("[data-admin-view]");
+        if (!button) return;
+        const view = button.dataset.adminView;
+        document.querySelectorAll(".nav-button").forEach((node) => node.classList.toggle("active", node === button));
+        document.querySelectorAll("[data-nav-group]").forEach((group) => {
+          const containsActive = group.contains(button);
+          if (containsActive) {
+            group.classList.remove("collapsed");
+            group.querySelector("[data-nav-toggle]")?.setAttribute("aria-expanded", "true");
+          }
+        });
+        document.querySelectorAll(".admin-view").forEach((node) => node.classList.toggle("active", node.id === `admin-${view}`));
+        document.querySelector("#admin-kicker").textContent = titles[view][0];
+        document.querySelector("#admin-title").textContent = titles[view][1];
+        showAdminList(view);
+      });
+
+      document.querySelector("#admin-logout").addEventListener("click", async () => {
+        await fetch("/api/admin/logout", { method: "POST" }).catch(() => {});
+        location.href = "/admin-login.html";
+      });
+
+      let officialImages = [];
+      let productXlsxData = "";
+      const adminModelState = {};
+      const input = document.querySelector("#image-input");
+      const preview = document.querySelector("#preview");
+      const emptyState = document.querySelector("#empty-state");
+      const statusNode = document.querySelector("#status");
+      const productKind = document.querySelector("#product-kind");
+      const productSource = document.querySelector("#product-source");
+      const productStatus = document.querySelector("#product-import-status");
+      const productXlsx = document.querySelector("#product-xlsx");
+      const taxonomyState = { styles: [], shapes: [], materials: [], tags: [], topics: [] };
+      const adminProductFilters = { nail_shape: "", product_type: "", item_kind: "" };
+      const adminTablePageSize = 25;
+      const adminTablePages = {};
+      const adminCreateModal = document.querySelector("#admin-create-modal");
+      const adminCreateTitle = document.querySelector("#admin-create-title");
+      const adminCreateBody = document.querySelector("#admin-create-body");
+      const adminCreateStash = document.querySelector("#admin-create-stash");
+      const adminUserDetailModal = document.querySelector("#admin-user-detail-modal");
+      const adminUserDetailBody = document.querySelector("#admin-user-detail-body");
+      const taxonomyMeta = {
+        styles: { label: "style", id: "style_id", columns: ["style_id", "style", "status"] },
+        shapes: { label: "shape", id: "shape_id", columns: ["shape_id", "shape", "status"] },
+        materials: { label: "material", id: "material_id", columns: ["material_id", "material", "image", "status"] },
+        topics: { label: "topic", id: "topic_id", columns: ["topic_id", "topic", "view_number", "attendance_number", "status"] },
+        tags: { label: "tag", id: "tag_id", columns: ["tag_id", "tag", "viewed_number", "attendance_number", "created_by_type", "status"] },
+      };
+      let activeAdminEdit = null;
+      let activeAdminDelete = null;
+      let activeMovedCreateNode = null;
+
+      function setStatus(message, type = "") {
+        statusNode.textContent = message;
+        statusNode.className = `status ${type}`;
+      }
+
+      function renderOfficialImagePreview() {
+        if (!officialImages.length) {
+          preview.innerHTML = "";
+          preview.hidden = true;
+          emptyState.hidden = false;
+          return;
+        }
+        preview.innerHTML = officialImages.map((image, index) => `
+          <figure>
+            <button class="official-preview-remove" type="button" data-official-image-remove="${index}" aria-label="Remove image">×</button>
+            <img src="${escapeHtml(image.previewUrl || image.data)}" alt="Template preview ${index + 1}" loading="lazy" decoding="async" />
+            <figcaption>${index === 0 ? "Cover · " : ""}${escapeHtml(image.name)} (${image.width} x ${image.height})</figcaption>
+          </figure>
+        `).join("");
+        preview.hidden = false;
+        emptyState.hidden = false;
+      }
+
+      function resetOfficialTemplateUpload() {
+        officialImages.forEach((image) => {
+          if (image.previewUrl) URL.revokeObjectURL(image.previewUrl);
+        });
+        officialImages = [];
+        input.value = "";
+        document.querySelector("#template-form").reset();
+        renderOfficialImagePreview();
+      }
+
+      function setProductStatus(message, type = "") {
+        productStatus.textContent = message;
+        productStatus.className = `status ${type}`;
+      }
+
+      function setButtonBusy(button, busy, busyText = "Processing...") {
+        if (!button) return;
+        if (!button.dataset.idleText) button.dataset.idleText = button.textContent;
+        button.disabled = busy;
+        button.textContent = busy ? busyText : button.dataset.idleText;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          "\"": "&quot;",
+          "'": "&#39;",
+        }[char]));
+      }
+
+      function readFileAsDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function imageDimensionsFromUrl(url) {
+        return new Promise((resolve) => {
+          const probe = new Image();
+          probe.onload = () => resolve({ width: probe.naturalWidth, height: probe.naturalHeight });
+          probe.onerror = () => resolve({ width: 0, height: 0 });
+          probe.src = url;
+        });
+      }
+
+      function parseConditionRewardValue(value) {
+        if (Array.isArray(value)) return value;
+        try {
+          const parsed = JSON.parse(value || "[]");
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function conditionRewardRowHtml(item = {}) {
+        const type = item.type || "like";
+        const rewardType = item.reward_type || "point";
+        const quantity = item.quantity || "";
+        const rewardQuantity = rewardType === "limited_template" ? 1 : (item.reward_quantity || "");
+        const option = (value, label, selected) => `<option value="${value}"${selected === value ? " selected" : ""}>${label}</option>`;
+        return `
+          <div class="condition-reward-row" data-condition-reward-row>
+            <select data-condition-type>
+              ${option("like", "like", type)}
+              ${option("comment", "comment", type)}
+              ${option("share", "share", type)}
+              ${option("post", "post", type)}
+            </select>
+            <input data-condition-quantity type="number" min="1" value="${escapeHtml(quantity)}" />
+            <select data-reward-type>
+              ${option("point", "point", rewardType)}
+              ${option("coupon", "coupon", rewardType)}
+              ${option("limited_template", "limited template", rewardType)}
+            </select>
+            <input data-reward-quantity type="number" min="1" value="${escapeHtml(rewardQuantity)}" ${rewardType === "limited_template" ? "readonly" : ""} />
+            <button class="condition-reward-remove" type="button" data-condition-reward-remove>×</button>
+          </div>
+        `;
+      }
+
+      function renderConditionRewardField(field, value = "") {
+        const items = parseConditionRewardValue(value);
+        const taskTypes = Array.isArray(field.taskTypes) ? ` data-task-types="${escapeHtml(field.taskTypes.join(","))}"` : "";
+        return `
+          <label class="condition-reward-box"${taskTypes}>
+            <span>${escapeHtml(field.label)}</span>
+            <input type="hidden" name="${escapeHtml(field.name)}" value="${escapeHtml(JSON.stringify(items))}" data-condition-reward-json />
+            <div class="condition-reward-head">
+              <span>condition_type</span>
+              <span>quantity</span>
+              <span>reward_type</span>
+              <span>quantity</span>
+              <span></span>
+            </div>
+            <div data-condition-reward-list>
+              ${(items.length ? items : [{ type: "like", quantity: "", reward_type: "point", reward_quantity: "" }]).map((item) => conditionRewardRowHtml(item)).join("")}
+            </div>
+            <button class="condition-reward-add" type="button" data-condition-reward-add>+</button>
+          </label>
+        `;
+      }
+
+      function syncConditionRewardUnits(scope = document) {
+        scope.querySelectorAll("[data-condition-reward-row]").forEach((row) => {
+          const rewardType = row.querySelector("[data-reward-type]")?.value || "point";
+          const rewardQuantity = row.querySelector("[data-reward-quantity]");
+          if (!rewardQuantity) return;
+          if (rewardType === "limited_template") {
+            rewardQuantity.value = "1";
+            rewardQuantity.readOnly = true;
+          } else {
+            rewardQuantity.readOnly = false;
+          }
+        });
+      }
+
+      function serializeConditionRewardFields(form) {
+        form.querySelectorAll(".condition-reward-box").forEach((box) => {
+          const hidden = box.querySelector("[data-condition-reward-json]");
+          if (!hidden || hidden.disabled) return;
+          const items = Array.from(box.querySelectorAll("[data-condition-reward-row]")).map((row) => {
+            const rewardType = row.querySelector("[data-reward-type]")?.value || "point";
+            return {
+              type: row.querySelector("[data-condition-type]")?.value || "like",
+              quantity: row.querySelector("[data-condition-quantity]")?.value || "",
+              reward_type: rewardType,
+              reward_quantity: rewardType === "limited_template" ? 1 : (row.querySelector("[data-reward-quantity]")?.value || ""),
+            };
+          });
+          hidden.value = JSON.stringify(items);
+        });
+      }
+
+      function activeProductForm() {
+        return productKind.value === "reward"
+          ? document.querySelector("#reward-product-form")
+          : document.querySelector("#formal-product-form");
+      }
+
+      function syncProductImportUi() {
+        const isReward = productKind.value === "reward";
+        const isXlsx = productSource.value === "xlsx";
+        document.querySelector("#formal-product-form").classList.toggle("hidden", isReward || isXlsx);
+        document.querySelector("#reward-product-form").classList.toggle("hidden", !isReward || isXlsx);
+        document.querySelector("#xlsx-box").classList.toggle("hidden", !isXlsx);
+        setProductStatus(isXlsx ? "Select an xlsx file to batch import." : "Fill the current product form, then import.");
+      }
+
+      async function loadAdminModels() {
+        try {
+          const response = await fetch("/api/admin/models");
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || "Failed to load admin models");
+          Object.assign(adminModelState, data.models || {});
+          setupAdminDataPages();
+        } catch (error) {
+          console.warn(error);
+        }
+      }
+
+      function setupAdminDataPages() {
+        Object.entries(adminModelState).forEach(([view, model]) => {
+          const section = document.querySelector(`#admin-${view}`);
+          if (!section || section.querySelector(".admin-data-page")) return;
+          Array.from(section.children).forEach((child) => child.classList.add("admin-create-content"));
+          const page = document.createElement("article");
+          page.className = "panel panel-pad admin-data-page";
+          const filtersHtml = view === "product" ? renderProductAdminFilterControls() : (model.filters || []).slice(0, 2).map((filter) => `
+                <label>${filter.label}
+                  <select data-admin-filter="${view}" data-filter-key="${filter.key}">
+                    <option value="">All</option>
+                    ${(filter.options || []).map((option) => `<option value="${option.value}">${option.label}</option>`).join("")}
+                  </select>
+                </label>
+              `).join("");
+          page.innerHTML = `
+            <div class="admin-data-head">
+              <div>
+                <p class="eyebrow">Data View</p>
+                <h3>${model.title || view}</h3>
+              </div>
+              ${model.editable ? `<button class="create-btn" type="button" data-admin-create="${view}">创建</button>` : ""}
+            </div>
+            <div class="admin-filter-bar ${view === "product" ? "product-filter-bar" : ""}">
+              <label>Search<input type="search" data-admin-search="${view}" placeholder="Search by ID, name, status" /></label>
+              ${filtersHtml}
+            </div>
+            <div class="taxonomy-table-wrap">
+              <table class="admin-record-table">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="table-pagination" data-admin-pagination="${view}"></div>
+            <p class="status" data-admin-list-status="${view}"></p>
+          `;
+          section.prepend(page);
+          if (section.classList.contains("active")) {
+            renderAdminDataTable(view);
+          } else {
+            const status = section.querySelector(`[data-admin-list-status="${view}"]`);
+            if (status) status.textContent = "Open this section to load its table.";
+          }
+        });
+        setupTaxonomyCreateButtons();
+      }
+
+      function setupTaxonomyCreateButtons() {
+        [
+          { view: "asset-data", title: "素材数据管理" },
+          { view: "topic-tags", title: "话题标签管理" },
+        ].forEach((item) => {
+          const section = document.querySelector(`#admin-${item.view}`);
+          const toolbar = section?.querySelector(".taxonomy-toolbar");
+          if (!toolbar || toolbar.querySelector("[data-admin-create]")) return;
+          const button = document.createElement("button");
+          button.className = "create-btn";
+          button.type = "button";
+          button.dataset.adminCreate = item.view;
+          button.textContent = "创建";
+          toolbar.append(button);
+        });
+      }
+
+      function productAdminShapeOptions() {
+        const rows = (taxonomyState.shapes || []).filter((row) => row.status !== "off");
+        return rows.map((row) => ({ value: row.shape, label: row.shape }));
+      }
+
+      function productAdminFilterSummary() {
+        return [
+          adminProductFilters.nail_shape || "All shape",
+          adminProductFilters.product_type || "All products",
+          adminProductFilters.item_kind === "product" ? "正式商品" : adminProductFilters.item_kind === "reward" ? "积分兑换商品" : "All model",
+        ].join(" / ");
+      }
+
+      function renderProductAdminFilterControls() {
+        const shapeOptions = productAdminShapeOptions();
+        const productTypes = ["穿戴甲", "打印甲", "配件"];
+        const itemKinds = [
+          { value: "product", label: "正式商品" },
+          { value: "reward", label: "积分兑换商品" },
+        ];
+        return `
+          <div class="product-admin-category-wrap">
+            <button class="product-admin-category-trigger" type="button" data-product-admin-filter-open>
+              <span>分类目录</span>
+              <small data-product-admin-filter-summary>${escapeHtml(productAdminFilterSummary())}</small>
+            </button>
+            <div class="product-admin-filter-popover hidden" data-product-admin-filter-popover>
+              <div class="product-admin-filter-row">
+                <label>甲型分类</label>
+                <select data-admin-filter="product" data-filter-key="nail_shape" data-product-admin-filter="nail_shape">
+                  <option value="">All</option>
+                  ${shapeOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join("")}
+                </select>
+              </div>
+              <div class="product-admin-filter-row">
+                <label>产品类型</label>
+                <div class="product-admin-filter-pick">
+                  <div class="product-admin-filter-options">
+                    ${productTypes.map((type) => `<button type="button" data-product-admin-pick="product_type" data-product-admin-value="${escapeHtml(type)}">${escapeHtml(type)}</button>`).join("")}
+                  </div>
+                  <select data-admin-filter="product" data-filter-key="type" data-product-admin-filter="product_type">
+                    <option value="">All</option>
+                    ${productTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join("")}
+                  </select>
+                </div>
+              </div>
+              <div class="product-admin-filter-row">
+                <label>商品类型</label>
+                <div class="product-admin-filter-pick">
+                  <div class="product-admin-filter-options">
+                    ${itemKinds.map((item) => `<button type="button" data-product-admin-pick="item_kind" data-product-admin-value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</button>`).join("")}
+                  </div>
+                  <select data-admin-filter="product" data-filter-key="item_kind" data-product-admin-filter="item_kind">
+                    <option value="">All</option>
+                    ${itemKinds.map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`).join("")}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      function syncProductAdminFilterUi() {
+        const section = document.querySelector("#admin-product");
+        if (!section) return;
+        section.querySelectorAll("[data-product-admin-filter]").forEach((select) => {
+          select.value = adminProductFilters[select.dataset.productAdminFilter] || "";
+        });
+        section.querySelectorAll("[data-product-admin-pick]").forEach((button) => {
+          button.classList.toggle("active", adminProductFilters[button.dataset.productAdminPick] === button.dataset.productAdminValue);
+        });
+        const summary = section.querySelector("[data-product-admin-filter-summary]");
+        if (summary) summary.textContent = productAdminFilterSummary();
+      }
+
+      function filteredAdminRows(view) {
+        const model = adminModelState[view];
+        const section = document.querySelector(`#admin-${view}`);
+        if (!model || !section) return [];
+        const term = (section.querySelector(`[data-admin-search="${view}"]`)?.value || "").trim().toLowerCase();
+        const filters = Array.from(section.querySelectorAll(`[data-admin-filter="${view}"]`)).map((node) => ({
+          key: node.dataset.filterKey,
+          value: node.value,
+        })).filter((item) => item.value);
+        return (model.rows || []).filter((row) => {
+          const textOk = !term || Object.values(row).some((value) => String(value ?? "").toLowerCase().includes(term));
+          const filterOk = filters.every((filter) => {
+            if (view === "product" && filter.key === "type" && row.item_kind === "reward") return false;
+            return String(row[filter.key] ?? "") === filter.value;
+          });
+          return textOk && filterOk;
+        });
+      }
+
+      function renderAdminTableCell(row, column) {
+        if (column === "image") {
+          const source = row.image_preview_url || row.image_base64 || row.image_url || "";
+          if (source && (source.startsWith("data:image") || /^https?:\/\//i.test(source))) {
+            return `<img class="table-image-thumb" src="${escapeHtml(source)}" alt="Saved product image" loading="lazy" decoding="async" />`;
+          }
+          if (source && source.startsWith("/api/")) {
+            return `<img class="table-image-thumb" src="${escapeHtml(source)}" alt="Saved product image" loading="lazy" decoding="async" />`;
+          }
+          return `<span class="table-image-empty">${escapeHtml(row.image || "No image")}</span>`;
+        }
+        return escapeHtml(row[column] ?? "");
+      }
+
+      function renderAdminDataTable(view) {
+        const model = adminModelState[view];
+        const section = document.querySelector(`#admin-${view}`);
+        if (!model || !section) return;
+        const columns = model.columns || [];
+        const rows = filteredAdminRows(view);
+        const totalPages = Math.max(1, Math.ceil(rows.length / adminTablePageSize));
+        const page = Math.min(Math.max(1, adminTablePages[view] || 1), totalPages);
+        adminTablePages[view] = page;
+        const visibleRows = rows.slice((page - 1) * adminTablePageSize, page * adminTablePageSize);
+        const actionHead = model.editable ? "<th>Actions</th>" : "";
+        section.querySelector(".admin-record-table thead").innerHTML = `<tr>${columns.map((column) => `<th>${column}</th>`).join("")}${actionHead}</tr>`;
+        section.querySelector(".admin-record-table tbody").innerHTML = visibleRows.map((row) => `
+          <tr>
+            ${columns.map((column) => `<td>${renderAdminTableCell(row, column)}</td>`).join("")}
+            ${model.editable ? `<td>
+              <div class="row-actions">
+                ${view === "users" ? `<button class="row-action detail" type="button" data-user-detail="${escapeHtml(row[model.idKey || "id"])}">详情</button>` : ""}
+                <button class="row-action edit" type="button" data-admin-row-edit="${view}" data-row-id="${escapeHtml(row[model.idKey || "id"])}" data-item-kind="${escapeHtml(row[model.kindKey] || "")}">编辑</button>
+                <button class="row-action delete" type="button" data-admin-row-delete="${view}" data-row-id="${escapeHtml(row[model.idKey || "id"])}" data-item-kind="${escapeHtml(row[model.kindKey] || "")}">删除</button>
+              </div>
+            </td>` : ""}
+          </tr>
+        `).join("") || `<tr><td colspan="${columns.length + (model.editable ? 1 : 0) || 1}">No data.</td></tr>`;
+        const pagination = section.querySelector(`[data-admin-pagination="${view}"]`);
+        if (pagination) {
+          pagination.innerHTML = rows.length > adminTablePageSize ? `
+            <button type="button" data-admin-page="${view}" data-page-dir="-1" ${page <= 1 ? "disabled" : ""}>Prev</button>
+            <span>Page ${page} / ${totalPages}</span>
+            <button type="button" data-admin-page="${view}" data-page-dir="1" ${page >= totalPages ? "disabled" : ""}>Next</button>
+          ` : "";
+        }
+        const status = section.querySelector(`[data-admin-list-status="${view}"]`);
+        if (status) status.textContent = rows.length > adminTablePageSize
+          ? `${visibleRows.length} of ${rows.length} record(s) shown.`
+          : `${rows.length} record(s) shown.`;
+      }
+
+      function openUserDetailModal(userId) {
+        const model = adminModelState.users || {};
+        const user = (model.rows || []).find((row) => String(row.user_id) === String(userId));
+        if (!user) return;
+        const actions = (model.userActions || []).filter((row) => String(row.user_id) === String(userId));
+        const infoKeys = ["user_id", "username", "user_kind", "recovery_code", "phone", "gender", "created_at", "last_seen_at"];
+        adminUserDetailBody.innerHTML = `
+          <div class="user-detail-grid">
+            ${infoKeys.map((key) => `
+              <div class="user-detail-item">
+                <span>${key}</span>
+                <strong>${escapeHtml(user[key] || "-")}</strong>
+              </div>
+            `).join("")}
+          </div>
+          <h4>用户行为记录</h4>
+          <div class="user-action-list">
+            ${actions.map((action) => `
+              <section class="user-action-row">
+                <strong>${escapeHtml(action.action_type)} · ${escapeHtml(action.target_type)}</strong>
+                <p>ID: ${escapeHtml(action.action_id)}</p>
+                <p>Target: ${escapeHtml(action.target_id)}</p>
+                <p>Time: ${escapeHtml(action.created_at)}</p>
+              </section>
+            `).join("") || `<section class="user-action-row"><p>暂无该用户行为记录。</p></section>`}
+          </div>
+        `;
+        adminUserDetailModal.classList.remove("hidden");
+        adminUserDetailModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeUserDetailModal() {
+        adminUserDetailModal.classList.add("hidden");
+        adminUserDetailModal.setAttribute("aria-hidden", "true");
+        adminUserDetailBody.innerHTML = "";
+      }
+
+      function showAdminList(view) {
+        const section = document.querySelector(`#admin-${view}`);
+        section?.classList.remove("create-mode");
+        if (adminModelState[view] && section?.querySelector(".admin-data-page")) {
+          renderAdminDataTable(view);
+        }
+      }
+
+      function setAdminCreateModalVisible(isVisible) {
+        adminCreateModal.classList.toggle("hidden", !isVisible);
+        adminCreateModal.setAttribute("aria-hidden", isVisible ? "false" : "true");
+      }
+
+      function stashMovedCreateNode() {
+        if (activeMovedCreateNode && activeMovedCreateNode.parentElement === adminCreateBody) {
+          adminCreateStash.append(activeMovedCreateNode);
+        }
+        activeMovedCreateNode = null;
+      }
+
+      function clearCreateModalBody() {
+        stashMovedCreateNode();
+        adminCreateBody.innerHTML = "";
+      }
+
+      function closeAdminCreateModal() {
+        stashMovedCreateNode();
+        adminCreateBody.innerHTML = "";
+        setAdminCreateModalVisible(false);
+      }
+
+      function openMovedCreateModal(title, node) {
+        if (!node) return;
+        clearCreateModalBody();
+        adminCreateTitle.textContent = title;
+        activeMovedCreateNode = node;
+        adminCreateBody.append(node);
+        setAdminCreateModalVisible(true);
+      }
+
+      function openProductCreateModal() {
+        const productPanel = document.querySelector("[data-product-import-panel]")
+          || document.querySelector("#admin-product .admin-create-content");
+        if (productPanel) productPanel.dataset.productImportPanel = "true";
+        openMovedCreateModal("商品管理", productPanel);
+        syncProductImportUi();
+      }
+
+      function openTaxonomyCreateModal(view) {
+        const isAsset = view === "asset-data";
+        const form = document.querySelector(isAsset ? "#asset-taxonomy-form" : "#social-taxonomy-form");
+        openMovedCreateModal(isAsset ? "创建素材分类数据" : "创建话题/标签数据", form);
+      }
+
+      function showAdminCreate(view) {
+        if (view === "product") {
+          openProductCreateModal();
+          return;
+        }
+        if (view === "asset-data" || view === "topic-tags") {
+          openTaxonomyCreateModal(view);
+          return;
+        }
+        renderModelCreateForm(view);
+      }
+
+      function renderModelCreateForm(view) {
+        const model = adminModelState[view];
+        const saveableViews = ["event", "task", "promo-assets", "promotion", "community", "device-info"];
+        if (!saveableViews.includes(view)) return;
+        if (!model?.editable) return;
+        clearCreateModalBody();
+        adminCreateTitle.textContent = model.title || "Create record";
+        const panel = document.createElement("section");
+        panel.className = "model-create-panel";
+        const fieldsHtml = (model.fields || []).map((field) => {
+          const label = escapeHtml(field.label);
+          const name = escapeHtml(field.name);
+          const eventTypes = Array.isArray(field.eventTypes) ? ` data-event-types="${escapeHtml(field.eventTypes.join(","))}"` : "";
+          const discountTypes = Array.isArray(field.discountTypes) ? ` data-discount-types="${escapeHtml(field.discountTypes.join(","))}"` : "";
+          const scopeValues = Array.isArray(field.scopeValues) ? ` data-scope-values="${escapeHtml(field.scopeValues.join(","))}"` : "";
+          const taskTypes = Array.isArray(field.taskTypes) ? ` data-task-types="${escapeHtml(field.taskTypes.join(","))}"` : "";
+          const promoTypes = Array.isArray(field.promoTypes) ? ` data-promo-types="${escapeHtml(field.promoTypes.join(","))}"` : "";
+          const fieldAttrs = `${eventTypes}${discountTypes}${scopeValues}${taskTypes}${promoTypes}`;
+          if (field.type === "condition_reward") {
+            return renderConditionRewardField(field);
+          }
+          if (field.type === "select") {
+            const options = (field.options || []).map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join("");
+            return `<label${fieldAttrs}>${label}<select name="${name}">${options}</select></label>`;
+          }
+          if (field.type === "textarea") {
+            return `<label class="wide"${fieldAttrs}>${label}<textarea name="${name}"></textarea></label>`;
+          }
+          if (field.type === "file") {
+            return `<label${fieldAttrs}>${label}<input name="${name}" type="file" accept="image/*" /></label>`;
+          }
+          return `<label${fieldAttrs}>${label}<input name="${name}" type="${escapeHtml(field.type || "text")}" /></label>`;
+        }).join("");
+        panel.innerHTML = `
+          <h4>${escapeHtml(model.title || "Create record")}</h4>
+          <form data-model-create-form="${escapeHtml(view)}">
+            <div class="form-grid">${fieldsHtml}</div>
+            <button class="submit" type="submit">Create and save</button>
+          </form>
+          <p class="status" data-model-create-status="${escapeHtml(view)}">Submit after filling. The list refreshes after a successful save.</p>
+        `;
+        adminCreateBody.append(panel);
+        setAdminCreateModalVisible(true);
+        syncEventCreateFields(panel);
+        syncTaskCreateFields(panel);
+        syncPromotionCreateFields(panel);
+        syncConditionRewardUnits(panel);
+      }
+
+      function syncEventCreateFields(scope = document) {
+        const form = scope.querySelector?.('[data-model-create-form="event"], [data-event-dynamic-form]') || (scope.matches?.('[data-model-create-form="event"], [data-event-dynamic-form]') ? scope : null);
+        if (!form) return;
+        const eventType = form.querySelector('[name="event_type"]')?.value || "";
+        const discountType = form.querySelector('[name="discount_type"]')?.value || "";
+        const promoScope = form.querySelector('[name="promo_scope"]')?.value || "";
+        form.querySelectorAll("[data-event-types], [data-discount-types], [data-scope-values]").forEach((field) => {
+          const allowed = (field.dataset.eventTypes || "").split(",").filter(Boolean);
+          const discountAllowed = (field.dataset.discountTypes || "").split(",").filter(Boolean);
+          const scopeAllowed = (field.dataset.scopeValues || "").split(",").filter(Boolean);
+          const hidden = (allowed.length && !allowed.includes(eventType))
+            || (discountAllowed.length && discountType && !discountAllowed.includes(discountType))
+            || (discountAllowed.length && eventType !== "promotion_discount")
+            || (scopeAllowed.length && promoScope && !scopeAllowed.includes(promoScope))
+            || (scopeAllowed.length && eventType !== "promotion_discount");
+          field.hidden = hidden;
+          field.classList.toggle("hidden", hidden);
+          field.style.display = hidden ? "none" : "";
+          field.querySelectorAll("input, select, textarea").forEach((input) => {
+            input.disabled = hidden;
+          });
+        });
+      }
+
+      function syncTaskCreateFields(scope = document) {
+        const form = scope.querySelector?.('[data-model-create-form="task"], [data-task-dynamic-form]') || (scope.matches?.('[data-model-create-form="task"], [data-task-dynamic-form]') ? scope : null);
+        if (!form) return;
+        const taskType = form.querySelector('[name="task_type"]')?.value || "";
+        form.querySelectorAll("[data-task-types]").forEach((field) => {
+          const allowed = (field.dataset.taskTypes || "").split(",").filter(Boolean);
+          const hidden = allowed.length && !allowed.includes(taskType);
+          field.hidden = hidden;
+          field.classList.toggle("hidden", hidden);
+          field.style.display = hidden ? "none" : "";
+          field.querySelectorAll("input, select, textarea").forEach((input) => {
+            input.disabled = hidden;
+          });
+        });
+      }
+
+      function syncPromotionCreateFields(scope = document) {
+        const form = scope.querySelector?.('[data-model-create-form="promotion"], [data-promotion-dynamic-form]') || (scope.matches?.('[data-model-create-form="promotion"], [data-promotion-dynamic-form]') ? scope : null);
+        if (!form) return;
+        const promoType = form.querySelector('[name="promo_type"]')?.value || "";
+        form.querySelectorAll("[data-promo-types]").forEach((field) => {
+          const allowed = (field.dataset.promoTypes || "").split(",").filter(Boolean);
+          const hidden = allowed.length && !allowed.includes(promoType);
+          field.hidden = hidden;
+          field.classList.toggle("hidden", hidden);
+          field.style.display = hidden ? "none" : "";
+          field.querySelectorAll("input, select, textarea").forEach((input) => {
+            input.disabled = hidden;
+          });
+        });
+      }
+
+      function setModelCreateStatus(view, message, type = "") {
+        const node = document.querySelector(`[data-model-create-status="${view}"]`);
+        if (!node) return;
+        node.textContent = message;
+        node.className = `status ${type}`;
+      }
+
+      async function submitModelCreate(event) {
+        const form = event.target.closest("[data-model-create-form]");
+        if (!form) return;
+        event.preventDefault();
+        const view = form.dataset.modelCreateForm;
+        const submitButton = form.querySelector("[type='submit']");
+        serializeConditionRewardFields(form);
+        const formData = new FormData(form);
+        const item = Object.fromEntries(formData.entries());
+        const file = formData.get("image_file");
+        delete item.image_file;
+        if (file && file.size && !item.image_base64) {
+          item.image_base64 = await readFileAsDataUrl(file);
+        }
+        setModelCreateStatus(view, "Saving to database...");
+        setButtonBusy(submitButton, true, "Creating...");
+        try {
+          const response = await fetch("/api/admin/create-record", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ module: view, item }),
+          });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || "Create failed");
+          if (adminModelState[view]) {
+            adminModelState[view].rows = data.rows || adminModelState[view].rows || [];
+            renderAdminDataTable(view);
+          }
+          setModelCreateStatus(view, `Create success: ${data.id} has been saved to database.`, "ok");
+          form.reset();
+          syncEventCreateFields(form);
+          syncTaskCreateFields(form);
+          syncPromotionCreateFields(form);
+          syncConditionRewardUnits(form);
+        } catch (error) {
+          setModelCreateStatus(view, `Create failed: ${error.message || "Create failed"}`, "error");
+        } finally {
+          setButtonBusy(submitButton, false);
+        }
+      }
+
+      function rowIdentity(view, row) {
+        const model = adminModelState[view] || {};
+        return {
+          id: row?.[model.idKey || "id"],
+          itemKind: model.kindKey ? row?.[model.kindKey] : "",
+        };
+      }
+
+      function findAdminRow(view, rowId, itemKind = "") {
+        const model = adminModelState[view];
+        if (!model) return null;
+        return (model.rows || []).find((row) => {
+          const identity = rowIdentity(view, row);
+          return String(identity.id) === String(rowId) && (!itemKind || String(identity.itemKind || "") === String(itemKind));
+        });
+      }
+
+      function editFieldsForRow(view, row) {
+        const model = adminModelState[view] || {};
+        if (view === "product") {
+          return row?.item_kind === "reward" ? (model.rewardFields || []) : (model.productFields || []);
+        }
+        return model.fields || [];
+      }
+
+      function normalizeAdminProductType(value) {
+        const text = String(value || "").trim();
+        const key = text.toLowerCase().replace(/[\s-]+/g, "_");
+        if (["press_on_nail", "press_on", "presson", "wearable_nail"].includes(key) || text === "穿戴甲") return "穿戴甲";
+        if (["printed_nail", "printing_nail", "printable_nail"].includes(key) || text === "打印甲") return "打印甲";
+        if (["nail_accessory", "accessory", "accessories"].includes(key) || text === "配件") return "配件";
+        return text;
+      }
+
+      function editFieldValue(field, row) {
+        if (!row) return "";
+        if (row.promo_content && ["min_spend", "amount_off", "discount_percent", "buy_quantity", "gift_quantity", "gift_product", "free_product", "description"].includes(field.name)) {
+          try {
+            const promoContent = JSON.parse(row.promo_content || "{}");
+            if (promoContent[field.name] !== undefined && promoContent[field.name] !== null) return promoContent[field.name];
+          } catch {}
+        }
+        const direct = row[field.name];
+        if (direct !== undefined && direct !== null) return field.name === "product_type" ? normalizeAdminProductType(direct) : direct;
+        const map = {
+          product_name: row.name,
+          reward_name: row.name,
+          product_type: row.type,
+          reward_type: row.type,
+          unit_price: row.price_or_points,
+          unit_point_cost: row.price_or_points,
+          product_info: row.info,
+          reward_info: row.info,
+        };
+        const mapped = map[field.name] ?? "";
+        return field.name === "product_type" ? normalizeAdminProductType(mapped) : mapped;
+      }
+
+      function renderCurrentImageInfo(row) {
+        const imageBase64 = row?.image_base64 || "";
+        const imageUrl = row?.image_url || "";
+        const imagePreviewUrl = row?.image_preview_url || "";
+        const imageSource = imagePreviewUrl || imageBase64 || imageUrl;
+        if (!imageSource) {
+          return `<span class="current-image-note">No image saved yet.</span>`;
+        }
+        const sourceType = row?.has_image_base64 ? "base64 image saved in database" : "image URL saved";
+        const preview = imageSource.startsWith("data:image") || /^https?:\/\//i.test(imageSource) || imageSource.startsWith("/api/")
+          ? `<img class="current-image-preview" src="${escapeHtml(imageSource)}" alt="Current saved image" loading="lazy" decoding="async" />`
+          : "";
+        const base64Detail = imageBase64
+          ? `<details><summary>View full base64</summary><textarea class="current-image-code" readonly>${escapeHtml(imageBase64)}</textarea></details>`
+          : "";
+        return `
+          <div class="current-image-box">
+            ${preview}
+            <span class="current-image-note">Current image: ${escapeHtml(sourceType)}</span>
+            ${base64Detail}
+          </div>
+        `;
+      }
+
+      function renderEditField(field, row) {
+        const label = escapeHtml(field.label);
+        const name = escapeHtml(field.name);
+        const value = editFieldValue(field, row);
+        const eventTypes = Array.isArray(field.eventTypes) ? ` data-event-types="${escapeHtml(field.eventTypes.join(","))}"` : "";
+        const discountTypes = Array.isArray(field.discountTypes) ? ` data-discount-types="${escapeHtml(field.discountTypes.join(","))}"` : "";
+        const scopeValues = Array.isArray(field.scopeValues) ? ` data-scope-values="${escapeHtml(field.scopeValues.join(","))}"` : "";
+        const taskTypes = Array.isArray(field.taskTypes) ? ` data-task-types="${escapeHtml(field.taskTypes.join(","))}"` : "";
+        const promoTypes = Array.isArray(field.promoTypes) ? ` data-promo-types="${escapeHtml(field.promoTypes.join(","))}"` : "";
+        const fieldAttrs = `${eventTypes}${discountTypes}${scopeValues}${taskTypes}${promoTypes}`;
+        if (field.type === "condition_reward") {
+          return renderConditionRewardField(field, value);
+        }
+        if (field.type === "select") {
+          const options = (field.options || []).map((option) => {
+            const selected = String(option.value) === String(value) ? " selected" : "";
+            return `<option value="${escapeHtml(option.value)}"${selected}>${escapeHtml(option.label)}</option>`;
+          }).join("");
+          return `<label${fieldAttrs}>${label}<select name="${name}">${options}</select></label>`;
+        }
+        if (field.type === "textarea") {
+          return `<label class="wide"${fieldAttrs}>${label}<textarea name="${name}">${escapeHtml(value)}</textarea></label>`;
+        }
+        if (field.type === "file") {
+          return `<label class="wide"${fieldAttrs}>${label}${renderCurrentImageInfo(row)}<input name="${name}" type="file" accept="image/*" /></label>`;
+        }
+        return `<label${fieldAttrs}>${label}<input name="${name}" type="${escapeHtml(field.type || "text")}" value="${escapeHtml(value)}" /></label>`;
+      }
+
+      function openAdminEditModal(view, rowId, itemKind = "") {
+        const row = findAdminRow(view, rowId, itemKind);
+        const model = adminModelState[view];
+        if (!row || !model) return;
+        activeAdminEdit = { view, rowId, itemKind };
+        document.querySelector("#admin-edit-title").textContent = `编辑 ${model.title || view}`;
+        document.querySelector("#admin-edit-fields").innerHTML = editFieldsForRow(view, row).map((field) => renderEditField(field, row)).join("");
+        document.querySelector("#admin-edit-form").toggleAttribute("data-event-dynamic-form", view === "event");
+        document.querySelector("#admin-edit-form").toggleAttribute("data-task-dynamic-form", view === "task");
+        document.querySelector("#admin-edit-form").toggleAttribute("data-promotion-dynamic-form", view === "promotion");
+        if (view === "event") syncEventCreateFields(document.querySelector("#admin-edit-form"));
+        if (view === "task") {
+          syncTaskCreateFields(document.querySelector("#admin-edit-form"));
+          syncConditionRewardUnits(document.querySelector("#admin-edit-form"));
+        }
+        if (view === "promotion") syncPromotionCreateFields(document.querySelector("#admin-edit-form"));
+        document.querySelector("#admin-edit-status").textContent = "";
+        document.querySelector("#admin-edit-modal").classList.remove("hidden");
+        document.querySelector("#admin-edit-modal").setAttribute("aria-hidden", "false");
+      }
+
+      function closeAdminEditModal() {
+        activeAdminEdit = null;
+        document.querySelector("#admin-edit-form").reset();
+        document.querySelector("#admin-edit-modal").classList.add("hidden");
+        document.querySelector("#admin-edit-modal").setAttribute("aria-hidden", "true");
+      }
+
+      function openAdminDeleteModal(view, rowId, itemKind = "") {
+        activeAdminDelete = { view, rowId, itemKind };
+        document.querySelector("#admin-delete-status").textContent = "删除后该条数据会从数据库中移除。";
+        document.querySelector("#admin-delete-status").className = "status";
+        document.querySelector("#admin-delete-modal").classList.remove("hidden");
+        document.querySelector("#admin-delete-modal").setAttribute("aria-hidden", "false");
+      }
+
+      function closeAdminDeleteModal() {
+        activeAdminDelete = null;
+        document.querySelector("#admin-delete-modal").classList.add("hidden");
+        document.querySelector("#admin-delete-modal").setAttribute("aria-hidden", "true");
+      }
+
+      async function submitAdminEdit(event) {
+        event.preventDefault();
+        if (!activeAdminEdit) return;
+        const form = event.currentTarget;
+        const submitButton = form.querySelector("[type='submit']");
+        serializeConditionRewardFields(form);
+        const formData = new FormData(form);
+        const item = Object.fromEntries(formData.entries());
+        const file = formData.get("image_file");
+        delete item.image_file;
+        if (file && file.size) {
+          item.image_base64 = await readFileAsDataUrl(file);
+        }
+        document.querySelector("#admin-edit-status").textContent = "Saving...";
+        setButtonBusy(submitButton, true, "Saving...");
+        try {
+          const response = await fetch("/api/admin/record", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ module: activeAdminEdit.view, id: activeAdminEdit.rowId, itemKind: activeAdminEdit.itemKind, item }),
+          });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || "Save failed");
+          adminModelState[activeAdminEdit.view].rows = data.rows || adminModelState[activeAdminEdit.view].rows || [];
+          renderAdminDataTable(activeAdminEdit.view);
+          closeAdminEditModal();
+        } catch (error) {
+          document.querySelector("#admin-edit-status").textContent = `保存失败：${error.message || "Save failed"}`;
+          document.querySelector("#admin-edit-status").className = "status error";
+        } finally {
+          setButtonBusy(submitButton, false);
+        }
+      }
+
+      async function confirmAdminDelete() {
+        if (!activeAdminDelete) return;
+        const button = document.querySelector("[data-admin-delete-confirm]");
+        const status = document.querySelector("#admin-delete-status");
+        status.textContent = "Deleting...";
+        setButtonBusy(button, true, "Deleting...");
+        try {
+          if (activeAdminDelete.taxonomy) {
+            const { scope, table, rowId } = activeAdminDelete;
+            const response = await fetch("/api/admin/taxonomy", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ table, id: rowId }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || "Delete failed");
+            taxonomyState[table] = data.data || [];
+            renderTaxonomy(scope);
+            closeAdminDeleteModal();
+            return;
+          }
+          const response = await fetch("/api/admin/record", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ module: activeAdminDelete.view, id: activeAdminDelete.rowId, itemKind: activeAdminDelete.itemKind }),
+          });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || "Delete failed");
+          adminModelState[activeAdminDelete.view].rows = data.rows || adminModelState[activeAdminDelete.view].rows || [];
+          renderAdminDataTable(activeAdminDelete.view);
+          closeAdminDeleteModal();
+        } catch (error) {
+          status.textContent = `删除失败：${error.message || "Delete failed"}`;
+          status.className = "status error";
+        } finally {
+          setButtonBusy(button, false);
+        }
+      }
+
+      function setTaxonomyStatus(scope, message, type = "") {
+        const node = document.querySelector(`#${scope}-taxonomy-status`);
+        if (!node) return;
+        node.textContent = message;
+        node.className = `status ${type}`;
+      }
+
+      async function loadTaxonomyData() {
+        try {
+          const response = await fetch("/api/admin/taxonomy");
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || "Failed to load taxonomy data");
+          Object.assign(taxonomyState, data.data || {});
+          renderTaxonomy("asset");
+          renderTaxonomy("social");
+          renderProductTaxonomyOptions();
+          const productPage = document.querySelector("#admin-product .admin-data-page");
+          const productFilterBar = productPage?.querySelector(".admin-filter-bar");
+          if (productFilterBar) {
+            const searchLabel = productFilterBar.querySelector("[data-admin-search='product']")?.closest("label")?.outerHTML || "";
+            productFilterBar.innerHTML = `${searchLabel}${renderProductAdminFilterControls()}`;
+            syncProductAdminFilterUi();
+          }
+          setTaxonomyStatus("asset", "Taxonomy data loaded.", "ok");
+          setTaxonomyStatus("social", "Taxonomy data loaded.", "ok");
+        } catch (error) {
+          setTaxonomyStatus("asset", error.message || "Failed to load taxonomy data", "error");
+          setTaxonomyStatus("social", error.message || "Failed to load taxonomy data", "error");
+        }
+      }
+
+      function selectedTaxonomyTable(scope) {
+        return document.querySelector(`#${scope}-taxonomy-table`).value;
+      }
+
+      function renderTaxonomy(scope) {
+        const table = selectedTaxonomyTable(scope);
+        const meta = taxonomyMeta[table];
+        const rows = taxonomyState[table] || [];
+        const head = document.querySelector(`#${scope}-taxonomy-head`);
+        const body = document.querySelector(`#${scope}-taxonomy-body`);
+        const imageField = document.querySelector(`#${scope}-taxonomy-form [data-taxonomy-image-field]`);
+        if (imageField) imageField.classList.toggle("hidden", table !== "materials");
+        head.innerHTML = `<tr>${meta.columns.map((column) => `<th>${column}</th>`).join("")}<th>Actions</th></tr>`;
+        body.innerHTML = rows.map((row) => `
+          <tr>
+            ${meta.columns.map((column) => `<td>${row[column] ?? ""}</td>`).join("")}
+            <td>
+              <div class="taxonomy-actions">
+                <button class="status-toggle" data-taxonomy-edit="${table}" data-taxonomy-scope="${scope}" data-taxonomy-id="${row[meta.id]}">编辑</button>
+                <button class="status-toggle ${row.status === "off" ? "off" : ""}" data-taxonomy-toggle="${table}" data-taxonomy-id="${row[meta.id]}" data-taxonomy-status="${row.status === "off" ? "on" : "off"}">${row.status === "off" ? "off" : "on"}</button>
+                <button class="danger-btn" data-taxonomy-delete="${table}" data-taxonomy-scope="${scope}" data-taxonomy-id="${row[meta.id]}">删除</button>
+              </div>
+            </td>
+          </tr>
+        `).join("") || `<tr><td colspan="${meta.columns.length + 1}">No data yet.</td></tr>`;
+      }
+
+      function renderProductTaxonomyOptions() {
+        document.querySelectorAll("[data-product-taxonomy]").forEach((select) => {
+          const table = select.dataset.productTaxonomy;
+          const meta = taxonomyMeta[table];
+          const rows = taxonomyState[table] || [];
+          if (!meta) return;
+          const current = select.value;
+          const emptyLabel = table === "styles" ? "Null" : "Not selected";
+          select.innerHTML = `<option value="">${emptyLabel}</option>${rows
+            .filter((row) => row.status !== "off")
+            .map((row) => `<option value="${escapeHtml(row[meta.label])}">${escapeHtml(row[meta.label])}</option>`)
+            .join("")}`;
+          if (current) select.value = current;
+        });
+      }
+
+      function openTaxonomyEdit(scope, table, id) {
+        const meta = taxonomyMeta[table];
+        const row = (taxonomyState[table] || []).find((item) => String(item[meta.id]) === String(id));
+        const form = document.querySelector(`#${scope}-taxonomy-form`);
+        if (!meta || !row || !form) return;
+        document.querySelector(`#${scope}-taxonomy-table`).value = table;
+        renderTaxonomy(scope);
+        form.dataset.editId = id;
+        form.querySelector('[name="name"]').value = row[meta.label] || "";
+        const imageInput = form.querySelector('[name="image"]');
+        if (imageInput) imageInput.value = row.image || "";
+        showAdminCreate(scope === "asset" ? "asset-data" : "topic-tags");
+        setTaxonomyStatus(scope, `正在编辑 ID ${id}。保存后会更新该条数据。`, "ok");
+      }
+
+      function openTaxonomyDeleteModal(scope, table, id) {
+        activeAdminDelete = { taxonomy: true, scope, table, rowId: id };
+        document.querySelector("#admin-delete-status").textContent = "删除后该条分类数据会从数据库中移除。";
+        document.querySelector("#admin-delete-status").className = "status";
+        document.querySelector("#admin-delete-modal").classList.remove("hidden");
+        document.querySelector("#admin-delete-modal").setAttribute("aria-hidden", "false");
+      }
+
+      async function submitTaxonomy(scope, event) {
+        event.preventDefault();
+        const formNode = event.currentTarget;
+        const table = selectedTaxonomyTable(scope);
+        const meta = taxonomyMeta[table];
+        const form = new FormData(formNode);
+        const submitButton = formNode.querySelector("[type='submit']");
+        const item = { id: form.get("id"), [meta.label]: form.get("name"), image: form.get("image") };
+        setTaxonomyStatus(scope, "Saving taxonomy item...");
+        setButtonBusy(submitButton, true, "Saving...");
+        try {
+          const editId = formNode.dataset.editId;
+          const response = await fetch("/api/admin/taxonomy", {
+            method: editId ? "PATCH" : "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(editId ? { table, id: editId, item } : { table, item }),
+          });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || "Save failed");
+          taxonomyState[table] = data.data || [];
+          formNode.reset();
+          delete formNode.dataset.editId;
+          renderTaxonomy(scope);
+          setTaxonomyStatus(scope, `创建成功：${data.id} 已保存。`, "ok");
+        } catch (error) {
+          setTaxonomyStatus(scope, `创建失败：${error.message || "Save failed"}`, "error");
+        } finally {
+          setButtonBusy(submitButton, false);
+        }
+      }
+
+      async function mutateTaxonomy(scope, method, payload) {
+        setTaxonomyStatus(scope, "Updating taxonomy data...");
+        try {
+          const response = await fetch("/api/admin/taxonomy", {
+            method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || "Update failed");
+          taxonomyState[payload.table] = data.data || [];
+          renderTaxonomy(scope);
+          setTaxonomyStatus(scope, "Updated.", "ok");
+        } catch (error) {
+          setTaxonomyStatus(scope, error.message || "Update failed", "error");
+        }
+      }
+
+      productKind.addEventListener("change", syncProductImportUi);
+      productSource.addEventListener("change", syncProductImportUi);
+      document.querySelector(".workspace").addEventListener("input", (event) => {
+        const search = event.target.closest("[data-admin-search]");
+        if (search) {
+          adminTablePages[search.dataset.adminSearch] = 1;
+          renderAdminDataTable(search.dataset.adminSearch);
+        }
+      });
+      document.querySelector(".workspace").addEventListener("change", (event) => {
+        const filter = event.target.closest("[data-admin-filter]");
+        if (filter) {
+          if (filter.dataset.adminFilter === "product" && filter.dataset.productAdminFilter) {
+            adminProductFilters[filter.dataset.productAdminFilter] = filter.value;
+            syncProductAdminFilterUi();
+          }
+          adminTablePages[filter.dataset.adminFilter] = 1;
+          renderAdminDataTable(filter.dataset.adminFilter);
+        }
+        if (event.target.matches('[data-model-create-form="event"] [name="event_type"], [data-model-create-form="event"] [name="discount_type"], [data-model-create-form="event"] [name="promo_scope"]')) {
+          syncEventCreateFields(event.target.closest("form"));
+        }
+        if (event.target.matches('[data-model-create-form="task"] [name="task_type"]')) {
+          syncTaskCreateFields(event.target.closest("form"));
+        }
+        if (event.target.matches('[data-model-create-form="promotion"] [name="promo_type"]')) {
+          syncPromotionCreateFields(event.target.closest("form"));
+        }
+      });
+      adminCreateModal.addEventListener("change", (event) => {
+        if (event.target.matches('[data-model-create-form="event"] [name="event_type"], [data-model-create-form="event"] [name="discount_type"], [data-model-create-form="event"] [name="promo_scope"]')) {
+          syncEventCreateFields(event.target.closest("form"));
+        }
+        if (event.target.matches('[data-model-create-form="task"] [name="task_type"]')) {
+          syncTaskCreateFields(event.target.closest("form"));
+        }
+        if (event.target.matches('[data-model-create-form="promotion"] [name="promo_type"]')) {
+          syncPromotionCreateFields(event.target.closest("form"));
+        }
+        if (event.target.matches("[data-reward-type]")) {
+          syncConditionRewardUnits(event.target.closest("form") || adminCreateModal);
+        }
+      });
+      document.querySelector("#admin-edit-form").addEventListener("change", (event) => {
+        if (event.target.matches('[name="event_type"], [name="discount_type"], [name="promo_scope"]')) {
+          syncEventCreateFields(event.currentTarget);
+        }
+        if (event.target.matches('[name="task_type"]')) {
+          syncTaskCreateFields(event.currentTarget);
+        }
+        if (event.target.matches('[name="promo_type"]')) {
+          syncPromotionCreateFields(event.currentTarget);
+        }
+        if (event.target.matches("[data-reward-type]")) {
+          syncConditionRewardUnits(event.currentTarget);
+        }
+      });
+      adminCreateModal.addEventListener("submit", submitModelCreate);
+      document.querySelector("[data-admin-create-cancel]").addEventListener("click", closeAdminCreateModal);
+      adminCreateModal.addEventListener("click", (event) => {
+        const addConditionReward = event.target.closest("[data-condition-reward-add]");
+        if (addConditionReward) {
+          const list = addConditionReward.closest(".condition-reward-box")?.querySelector("[data-condition-reward-list]");
+          if (list) {
+            list.insertAdjacentHTML("beforeend", conditionRewardRowHtml({ type: "like", quantity: "", reward_type: "point", reward_quantity: "" }));
+            syncConditionRewardUnits(addConditionReward.closest("form") || adminCreateModal);
+          }
+          return;
+        }
+        const removeConditionReward = event.target.closest("[data-condition-reward-remove]");
+        if (removeConditionReward) {
+          const list = removeConditionReward.closest("[data-condition-reward-list]");
+          const rows = list?.querySelectorAll("[data-condition-reward-row]");
+          if ((rows?.length || 0) > 1) removeConditionReward.closest("[data-condition-reward-row]")?.remove();
+          return;
+        }
+        if (event.target === adminCreateModal) closeAdminCreateModal();
+      });
+      document.querySelector(".workspace").addEventListener("click", (event) => {
+        const productFilterOpen = event.target.closest("[data-product-admin-filter-open]");
+        if (productFilterOpen) {
+          const popover = productFilterOpen.closest(".product-admin-category-wrap")?.querySelector("[data-product-admin-filter-popover]");
+          popover?.classList.toggle("hidden");
+          syncProductAdminFilterUi();
+          return;
+        }
+        const productFilterPick = event.target.closest("[data-product-admin-pick]");
+        if (productFilterPick) {
+          const key = productFilterPick.dataset.productAdminPick;
+          const value = productFilterPick.dataset.productAdminValue || "";
+          adminProductFilters[key] = adminProductFilters[key] === value ? "" : value;
+          syncProductAdminFilterUi();
+          adminTablePages.product = 1;
+          renderAdminDataTable("product");
+          return;
+        }
+        const pager = event.target.closest("[data-admin-page]");
+        if (pager) {
+          const view = pager.dataset.adminPage;
+          adminTablePages[view] = (adminTablePages[view] || 1) + Number(pager.dataset.pageDir || 0);
+          renderAdminDataTable(view);
+          return;
+        }
+        const editRow = event.target.closest("[data-admin-row-edit]");
+        if (editRow) {
+          openAdminEditModal(editRow.dataset.adminRowEdit, editRow.dataset.rowId, editRow.dataset.itemKind || "");
+          return;
+        }
+        const userDetail = event.target.closest("[data-user-detail]");
+        if (userDetail) {
+          openUserDetailModal(userDetail.dataset.userDetail);
+          return;
+        }
+        const deleteRow = event.target.closest("[data-admin-row-delete]");
+        if (deleteRow) {
+          openAdminDeleteModal(deleteRow.dataset.adminRowDelete, deleteRow.dataset.rowId, deleteRow.dataset.itemKind || "");
+          return;
+        }
+        const create = event.target.closest("[data-admin-create]");
+        if (create) {
+          showAdminCreate(create.dataset.adminCreate);
+          return;
+        }
+        const back = event.target.closest("[data-admin-back-list]");
+        if (back) {
+          showAdminList(back.dataset.adminBackList);
+          return;
+        }
+      });
+      document.querySelector("#admin-edit-form").addEventListener("submit", submitAdminEdit);
+      document.querySelector("#admin-edit-form").addEventListener("click", (event) => {
+        const addConditionReward = event.target.closest("[data-condition-reward-add]");
+        if (addConditionReward) {
+          const list = addConditionReward.closest(".condition-reward-box")?.querySelector("[data-condition-reward-list]");
+          if (list) {
+            list.insertAdjacentHTML("beforeend", conditionRewardRowHtml({ type: "like", quantity: "", reward_type: "point", reward_quantity: "" }));
+            syncConditionRewardUnits(event.currentTarget);
+          }
+          return;
+        }
+        const removeConditionReward = event.target.closest("[data-condition-reward-remove]");
+        if (removeConditionReward) {
+          const list = removeConditionReward.closest("[data-condition-reward-list]");
+          const rows = list?.querySelectorAll("[data-condition-reward-row]");
+          if ((rows?.length || 0) > 1) removeConditionReward.closest("[data-condition-reward-row]")?.remove();
+        }
+      });
+      document.querySelectorAll("[data-admin-edit-cancel]").forEach((button) => button.addEventListener("click", closeAdminEditModal));
+      document.querySelector("[data-admin-delete-cancel]").addEventListener("click", closeAdminDeleteModal);
+      document.querySelector("[data-admin-delete-confirm]").addEventListener("click", confirmAdminDelete);
+      document.querySelector("[data-user-detail-close]").addEventListener("click", closeUserDetailModal);
+      adminUserDetailModal.addEventListener("click", (event) => {
+        if (event.target === adminUserDetailModal) closeUserDetailModal();
+      });
+      document.querySelector("#asset-taxonomy-table").addEventListener("change", () => renderTaxonomy("asset"));
+      document.querySelector("#social-taxonomy-table").addEventListener("change", () => renderTaxonomy("social"));
+      document.querySelector("#asset-taxonomy-form").addEventListener("submit", (event) => submitTaxonomy("asset", event));
+      document.querySelector("#social-taxonomy-form").addEventListener("submit", (event) => submitTaxonomy("social", event));
+      document.querySelector("#admin-asset-data").addEventListener("click", (event) => {
+        const edit = event.target.closest("[data-taxonomy-edit]");
+        if (edit) {
+          openTaxonomyEdit(edit.dataset.taxonomyScope, edit.dataset.taxonomyEdit, edit.dataset.taxonomyId);
+          return;
+        }
+        const toggle = event.target.closest("[data-taxonomy-toggle]");
+        if (toggle) {
+          mutateTaxonomy("asset", "PATCH", { table: toggle.dataset.taxonomyToggle, id: toggle.dataset.taxonomyId, item: { status: toggle.dataset.taxonomyStatus } });
+          return;
+        }
+        const remove = event.target.closest("[data-taxonomy-delete]");
+        if (remove) openTaxonomyDeleteModal(remove.dataset.taxonomyScope, remove.dataset.taxonomyDelete, remove.dataset.taxonomyId);
+      });
+      document.querySelector("#admin-topic-tags").addEventListener("click", (event) => {
+        const edit = event.target.closest("[data-taxonomy-edit]");
+        if (edit) {
+          openTaxonomyEdit(edit.dataset.taxonomyScope, edit.dataset.taxonomyEdit, edit.dataset.taxonomyId);
+          return;
+        }
+        const toggle = event.target.closest("[data-taxonomy-toggle]");
+        if (toggle) {
+          mutateTaxonomy("social", "PATCH", { table: toggle.dataset.taxonomyToggle, id: toggle.dataset.taxonomyId, item: { status: toggle.dataset.taxonomyStatus } });
+          return;
+        }
+        const remove = event.target.closest("[data-taxonomy-delete]");
+        if (remove) openTaxonomyDeleteModal(remove.dataset.taxonomyScope, remove.dataset.taxonomyDelete, remove.dataset.taxonomyId);
+      });
+
+      productXlsx.addEventListener("change", () => {
+        const file = productXlsx.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          productXlsxData = reader.result;
+          setProductStatus(`XLSX ready: ${file.name}`, "ok");
+        };
+        reader.readAsDataURL(file);
+      });
+
+      document.querySelector("#import-product-submit").addEventListener("click", async (event) => {
+        const submitButton = event.currentTarget;
+        const itemType = productKind.value;
+        const source = productSource.value;
+        let payload = { itemType, source };
+        if (source === "xlsx") {
+          if (!productXlsxData) {
+            setProductStatus("Please select an xlsx file first.", "error");
+            productXlsx.focus();
+            return;
+          }
+          payload.xlsx = productXlsxData;
+        } else {
+          const form = new FormData(activeProductForm());
+          payload.item = Object.fromEntries(form.entries());
+          const imageFile = form.get("image_file");
+          delete payload.item.image_file;
+          if (imageFile && imageFile.size) {
+            payload.item.image_base64 = await readFileAsDataUrl(imageFile);
+          }
+        }
+        setProductStatus("Importing product data...");
+        setButtonBusy(submitButton, true, "Importing...");
+        try {
+          const response = await fetch("/api/admin/import-product", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || "Import failed");
+          setProductStatus(`创建成功：已导入 ${data.imported} 条${data.itemType === "reward" ? "积分商品" : "正式商品"}，ID：${data.ids.join(", ")}`, "ok");
+          await loadAdminModels();
+          renderAdminDataTable("product");
+        } catch (error) {
+          setProductStatus(`创建失败：${error.message || "Import failed"}`, "error");
+        } finally {
+          setButtonBusy(submitButton, false);
+        }
+      });
+
+      syncProductImportUi();
+      loadAdminModels();
+      loadTaxonomyData();
+
+      input.addEventListener("change", async () => {
+        const remainingSlots = Math.max(0, 6 - officialImages.length);
+        const files = [...(input.files || [])].slice(0, remainingSlots);
+        input.value = "";
+        if (!remainingSlots) {
+          setStatus("Maximum 6 images already selected. Remove one before adding another.", "error");
+          return;
+        }
+        if (!files.length) return;
+        try {
+          const loaded = await Promise.all(files.map(async (file, index) => {
+            const previewUrl = URL.createObjectURL(file);
+            const dimensions = await imageDimensionsFromUrl(previewUrl);
+            return { file, previewUrl, data: "", name: file.name, index, ...dimensions };
+          }));
+          officialImages.push(...loaded);
+          renderOfficialImagePreview();
+          setStatus(`Images ready: ${officialImages.length}/6 selected. First image will be the cover.`, "ok");
+        } catch (error) {
+          setStatus(`Image read failed: ${error.message || "failed"}`, "error");
+        }
+      });
+
+      preview.addEventListener("click", (event) => {
+        const remove = event.target.closest("[data-official-image-remove]");
+        if (!remove) return;
+        const [removed] = officialImages.splice(Number(remove.dataset.officialImageRemove), 1);
+        if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+        renderOfficialImagePreview();
+        setStatus(officialImages.length
+          ? `Images ready: ${officialImages.length}/6 selected. First image will be the cover.`
+          : "Waiting for image and metadata.",
+          officialImages.length ? "ok" : "");
+      });
+
+      document.querySelector("#template-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const submitButton = event.currentTarget.querySelector("[type='submit']");
+        if (!officialImages.length) {
+          setStatus("Please select at least one image first.", "error");
+          input.focus();
+          return;
+        }
+        const form = new FormData(event.currentTarget);
+        const payload = Object.fromEntries(form.entries());
+        setButtonBusy(submitButton, true, "Preparing...");
+        try {
+          setStatus("Preparing selected images...");
+          const encodedImages = await Promise.all(officialImages.map(async (image) => ({
+            data: image.data || await readFileAsDataUrl(image.file),
+            width: image.width,
+            height: image.height,
+          })));
+          payload.images = encodedImages;
+          payload.image = payload.images[0]?.data || "";
+          payload.width = payload.images[0]?.width || 0;
+          payload.height = payload.images[0]?.height || 0;
+          setStatus("Uploading to official template library...");
+          setButtonBusy(submitButton, true, "Uploading...");
+          const response = await fetch("/api/admin/official-template", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || "Upload failed");
+          setStatus(`创建成功：官方模板已保存。templateId: ${data.templateId}; images: ${(data.imageUrls || [data.imageUrl]).filter(Boolean).length}`, "ok");
+          await loadAdminModels();
+          renderAdminDataTable("official");
+          resetOfficialTemplateUpload();
+          setStatus(`创建成功：官方模板已保存。templateId: ${data.templateId}; images: ${(data.imageUrls || [data.imageUrl]).filter(Boolean).length}`, "ok");
+        } catch (error) {
+          setStatus(`创建失败：${error.message || "Upload failed"}`, "error");
+        } finally {
+          setButtonBusy(submitButton, false);
+        }
+      });
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coupon Wallet</title>
+    <style>
+      :root {
+        --bg: #fff7fb;
+        --panel: rgba(255, 255, 255, 0.88);
+        --ink: #2d2330;
+        --muted: #756b78;
+        --pink: #f7a8c8;
+        --pink-strong: #df5e93;
+        --violet: #8c7cff;
+        --line: rgba(111, 77, 97, 0.16);
+        --shadow: 0 24px 70px rgba(208, 106, 156, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, "Microsoft YaHei", Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top right, rgba(140, 124, 255, 0.16), transparent 32rem),
+          linear-gradient(135deg, #fff9fc, var(--bg) 58%, #f8fbff);
+      }
+
+      button,
+      select {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .page {
+        width: min(1280px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 26px 0 52px;
+      }
+
+      .back-btn {
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.78);
+        color: var(--pink-strong);
+        border-radius: 999px;
+        padding: 10px 16px;
+        font-weight: 700;
+        box-shadow: 0 12px 28px rgba(223, 94, 147, 0.1);
+      }
+
+      .hero {
+        margin-top: 24px;
+        padding: clamp(22px, 4vw, 40px);
+        border: 1px solid rgba(247, 168, 200, 0.46);
+        border-radius: 22px;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 228, 239, 0.72)),
+          radial-gradient(circle at 88% 12%, rgba(132, 230, 213, 0.26), transparent 22rem);
+        box-shadow: var(--shadow);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--pink-strong);
+        text-transform: uppercase;
+        font-size: 0.78rem;
+        font-weight: 800;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.8rem, 4vw, 3.2rem);
+        line-height: 1.05;
+      }
+
+      .toolbar {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+        margin: 20px 0 16px;
+      }
+
+      .toolbar label {
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .toolbar select {
+        min-width: 180px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.86);
+        padding: 10px 12px;
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .coupon-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .coupon-card {
+        min-height: 188px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        border: 1px solid rgba(247, 168, 200, 0.5);
+        border-radius: 18px;
+        background:
+          linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(255, 228, 239, 0.74)),
+          radial-gradient(circle at 92% 10%, rgba(140, 124, 255, 0.2), transparent 11rem);
+        padding: 16px;
+        box-shadow: 0 18px 48px rgba(208, 106, 156, 0.12);
+      }
+
+      .coupon-card strong {
+        display: block;
+        font-size: 1.1rem;
+        line-height: 1.18;
+      }
+
+      .tag {
+        align-self: flex-start;
+        color: var(--pink-strong);
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(247, 168, 200, 0.44);
+        border-radius: 999px;
+        padding: 5px 9px;
+        font-size: 0.78rem;
+        font-weight: 800;
+      }
+
+      .discount {
+        margin: 14px 0 8px;
+        color: var(--violet);
+        font-size: 1.45rem;
+        font-weight: 900;
+      }
+
+      .date {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .empty {
+        grid-column: 1 / -1;
+        border: 1px dashed var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.7);
+        padding: 34px;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      @media (max-width: 1120px) {
+        .coupon-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 860px) {
+        .coupon-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 620px) {
+        .toolbar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .toolbar select {
+          width: 100%;
+        }
+
+        .coupon-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+      }
+
+      @media (max-width: 420px) {
+        .coupon-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <button class="back-btn" id="back-btn" type="button">← Back</button>
+
+      <section class="hero">
+        <p class="eyebrow">Coupon Wallet</p>
+        <h1 id="wallet-title">Loading your benefits...</h1>
+      </section>
+
+      <div class="toolbar">
+        <label for="promo-type-filter">优惠类型</label>
+        <select id="promo-type-filter">
+          <option value="">全部优惠</option>
+          <option value="满减优惠">满减优惠</option>
+          <option value="折扣优惠">折扣优惠</option>
+          <option value="买送优惠">买送优惠</option>
+          <option value="免费商品">免费商品</option>
+        </select>
+      </div>
+
+      <section class="coupon-grid" id="coupon-grid">
+        <div class="empty">Loading...</div>
+      </section>
+    </main>
+
+    <script>
+      const SESSION_KEY = "nailStudioUserAuthSessionV1";
+      const GUEST_KEY = "nailStudioUserSession";
+      const state = { promos: [], user: { username: "Guest" }, total: 0 };
+
+      function promoSummary(promo) {
+        try {
+          const content = JSON.parse(promo.promo_content || "{}");
+          if (content.summary) return content.summary;
+          if (promo.promo_type === "满减优惠") return `满 ${content.min_spend || 0} 减 ${content.amount_off || 0}`;
+          if (promo.promo_type === "折扣优惠") return `${content.discount_percent || 0}% OFF`;
+          if (promo.promo_type === "买送优惠") return `买 ${content.buy_quantity || 1} 送 ${content.gift_quantity || 1}`;
+          if (promo.promo_type === "免费商品") return `免费商品：${content.free_product || "指定商品"}`;
+        } catch {}
+        return promo.promo_type || "优惠";
+      }
+
+      function renderWallet() {
+        const grid = document.querySelector("#coupon-grid");
+        const filter = document.querySelector("#promo-type-filter").value;
+        const promos = state.promos.filter((promo) => !filter || promo.promo_type === filter);
+        document.querySelector("#wallet-title").textContent = `用户${state.user.username || "Guest"}，您有${state.total ?? promos.length}个优惠未使用`;
+        grid.innerHTML = promos.map((promo) => `
+          <article class="coupon-card">
+            <div>
+              <span class="tag">${promo.promo_type || "优惠"}</span>
+              <p class="discount">${promoSummary(promo)}</p>
+              <strong>${promo.promo_title || promo.promo_id}</strong>
+            </div>
+            <p class="date">有效期：${promo.expire_date || "未设置"}</p>
+          </article>
+        `).join("") || `<div class="empty">暂无符合该类型的优惠。</div>`;
+      }
+
+      async function loadWallet() {
+        const sessionId = localStorage.getItem(SESSION_KEY) || "";
+        let guest = {};
+        try {
+          guest = JSON.parse(localStorage.getItem(GUEST_KEY) || "{}");
+        } catch {}
+        const response = await fetch("/api/user/promos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, userId: guest.userId }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) throw new Error(payload.error || "Failed to load coupons.");
+        state.promos = payload.promos || [];
+        state.user = payload.user || state.user;
+        state.total = payload.total ?? state.promos.length;
+        renderWallet();
+      }
+
+      document.querySelector("#back-btn").addEventListener("click", () => {
+        if (history.length > 1) history.back();
+        else location.href = "index.html";
+      });
+      document.querySelector("#promo-type-filter").addEventListener("change", renderWallet);
+      loadWallet().catch((error) => {
+        document.querySelector("#wallet-title").textContent = "优惠券包暂时无法读取";
+        document.querySelector("#coupon-grid").innerHTML = `<div class="empty">${error.message || "Load failed."}</div>`;
+      });
+    </script>
+  </body>
+</html>

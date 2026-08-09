@@ -1,0 +1,986 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Nail Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=126" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">AI</div>
+          <div>
+            <p class="brand-kicker" data-i18n="brandKicker">AI Nail Studio</p>
+            <h1 data-i18n="brandName">Nail Future</h1>
+          </div>
+        </div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-item active" data-view="home">
+            <span data-i18n="navHome">Home</span>
+          </button>
+          <button class="nav-item" data-view="products">
+            <span data-i18n="navProducts">Press-On Nail Products</span>
+          </button>
+          <button class="nav-item" data-view="design">
+            <span data-i18n="navDesign">Design Center</span>
+          </button>
+          <button class="nav-item" data-view="community" hidden>
+            <span data-i18n="navCommunity">Community</span>
+          </button>
+          <button class="nav-item" data-view="member" hidden>
+            <span data-i18n="navMember">Member Center</span>
+          </button>
+          <button class="nav-item" data-view="about">
+            <span data-i18n="navAbout">About us</span>
+          </button>
+        </nav>
+
+        <div class="nav-actions">
+          <button class="nav-lang-toggle" id="lang-toggle">中文</button>
+          <div class="auth-widget" id="auth-widget">
+            <button class="auth-login-button" id="open-login-modal" type="button">Log in</button>
+          </div>
+        </div>
+
+        <div class="sidebar-card hidden">
+          <p data-i18n="memberTier">Aurora Member</p>
+          <span data-i18n="memberHint">Ready for rewards</span>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" data-i18n="eyebrow">Elegant AI manicure workspace</p>
+            <h2 id="page-title" data-i18n="pageHome">Home</h2>
+          </div>
+          <div class="top-actions">
+            <div class="search-wrap">
+              <span>⌕</span>
+              <input id="global-search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="Search tasks, designs, rewards" />
+            </div>
+            <button class="ghost-btn" id="lang-toggle">中文</button>
+            <div class="auth-widget" id="auth-widget">
+              <button class="auth-login-button" id="open-login-modal" type="button">Log in</button>
+            </div>
+          </div>
+        </header>
+
+        <section class="hero-band hidden">
+          <div class="hero-copy">
+            <p class="eyebrow" data-i18n="heroEyebrow">AI powered nail printing</p>
+            <h3 data-i18n="heroTitle">Design, share, reward, and print futuristic nail art.</h3>
+            <p data-i18n="heroText">A soft pink digital studio for community missions, member benefits, and printable nail pattern creation.</p>
+          </div>
+          <div class="nail-preview" aria-label="AI nail art preview">
+            <div class="nail nail-a"></div>
+            <div class="nail nail-b"></div>
+            <div class="nail nail-c"></div>
+            <div class="scan-line"></div>
+          </div>
+        </section>
+
+        <section class="view active" id="home-view" data-title-key="pageHome">
+          <section class="nailbot-home-hero" aria-label="Nailbot home">
+            <div class="nailbot-home-logo-mark">
+              <img class="nailbot-home-logo" src="assets/nailbot-logo-white-trim.png" alt="Nailbot" />
+            </div>
+            <p class="nailbot-home-tagline">New Fashion in Nail Art</p>
+          </section>
+          <section class="home-product-showcase" aria-label="Press-on nail products">
+            <div class="home-product-grid" id="home-product-grid"></div>
+          </section>
+        </section>
+
+        <section class="view" id="community-view" data-title-key="pageCommunity">
+          <button class="campaign-carousel community-campaign-carousel" id="community-campaign-carousel" type="button" data-campaign-target="community" aria-label="Community campaign"></button>
+          <div class="tab-panel active" id="forum-panel">
+            <div class="toolbar">
+              <div class="segmented" id="post-sort">
+                <button class="active" data-sort="recent" data-i18n="sortRecent">Latest</button>
+                <button data-sort="hot" data-i18n="sortHot">Trending</button>
+              </div>
+            </div>
+            <section class="community-filter-board" id="community-category-grid" aria-label="Community filters"></section>
+            <div class="post-list" id="post-list"></div>
+          </div>
+        </section>
+
+        <section class="view" id="member-view" data-title-key="pageMember">
+          <button class="member-floating-label hidden" id="member-floating-label" type="button" aria-label="Back to member section"></button>
+          <div class="member-layout">
+            <section class="coupon-use-module" id="coupon-use-module">
+              <h3 data-i18n="couponUseTitle">Coupon Use</h3>
+              <button class="primary-btn coupon-activate-trigger" id="open-coupon-modal" data-i18n="activateBenefitCoupon">Activate Benefit Coupon</button>
+            </section>
+          </div>
+          <div class="two-col member-main-grid">
+            <article class="panel member-hub-panel">
+              <button class="section-head compact member-sticky-label" data-member-jump="task-list" type="button">
+                <div>
+                  <p class="eyebrow" data-i18n="promoEyebrow">Wallet</p>
+                  <h3 data-i18n="promoTitle">Promos and benefits</h3>
+                </div>
+              </button>
+              <a class="member-task-entry" href="task-center.html?return=member" data-i18n="memberTaskPageEntry">Task Center</a>
+              <div class="promo-list" id="promo-list"></div>
+            </article>
+
+            <article class="panel member-detail-panel">
+              <section class="achievement-board" id="member-stats-board">
+                <button class="section-head compact member-sticky-label member-section-label" data-member-jump="stats" type="button">
+                  <div>
+                    <p class="eyebrow" data-i18n="memberBonusEyebrow">Benefit Center</p>
+                    <h3 data-i18n="memberTabBonusRewards">Bonus&Rewards</h3>
+                  </div>
+                </button>
+                <h3 class="achievement-title" data-i18n="achievementTitle">You have earned...</h3>
+                <div class="achievement-lines">
+                  <p>· <span data-i18n="pointsTotal">Total Points</span> <strong id="points-total">8,420</strong> pt</p>
+                  <p>· <span data-i18n="topAchievement">Highest Achievement</span> <strong data-i18n="topAchievementValue">5M Total Social Heat</strong></p>
+                  <p>· <span data-i18n="tasksDone">Tasks Done</span> <strong>36</strong></p>
+                </div>
+                <a class="member-center-entry" href="member-center.html?return=member" data-i18n="memberCenterPageEntry">Member Center</a>
+                <div class="latest-achievement">
+                  <button data-member-jump="stats" data-i18n="latestAchievementHeat">· You just reached the 5M total heat achievement!</button>
+                  <button data-member-jump="stats" data-i18n="latestAchievementReward">· You just earned a 600pt creator achievement reward!</button>
+                </div>
+              </section>
+
+              <section class="member-store-module" id="member-store">
+                <div class="member-store-head">
+                  <button class="section-head compact member-sticky-label member-section-label member-store-title-label" data-member-jump="store" type="button">
+                    <div>
+                    <p class="eyebrow" data-i18n="memberStoreEyebrow">Reward Mall</p>
+                    <h3 data-i18n="memberTabMall">Mall</h3>
+                    </div>
+                  </button>
+                  <a class="member-store-link" href="reward-mall.html?return=member" data-i18n="memberStoreEntry">Enter Mall</a>
+                </div>
+                <div class="member-store-track" id="member-store-track"></div>
+              </section>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="products-view" data-title-key="pageProducts">
+          <section class="product-promo-rail" aria-label="Product campaigns">
+            <div class="product-promo-track" id="product-promo-track"></div>
+          </section>
+
+          <section class="product-filter-board" aria-label="Product filters">
+            <div class="product-filter-inline" id="product-category-grid"></div>
+            <div class="products-actions">
+              <button class="cart-button" id="open-cart" type="button" aria-label="Open cart">
+                <span class="cart-glyph">Cart</span>
+                <span class="cart-count" id="cart-count">0</span>
+              </button>
+              <label class="products-search">
+                <span>Search</span>
+                <input id="product-search" type="search" data-i18n-placeholder="productSearchPlaceholder" placeholder="Search product ID or tag" />
+              </label>
+            </div>
+          </section>
+
+          <div class="product-grid" id="product-grid"></div>
+        </section>
+
+        <section class="view" id="about-view" data-title-key="pageAbout">
+          <article class="panel about-placeholder">
+            <p class="eyebrow" data-i18n="navAbout">About us</p>
+            <h2 data-i18n="pageAbout">About NailBot</h2>
+          </article>
+        </section>
+
+        <section class="view" id="design-view" data-title-key="pageDesign">
+          <div class="tabs">
+            <button class="tab active" data-tab="canvas" data-i18n="designCanvas">Canvas</button>
+            <button class="tab" data-tab="printcode" data-i18n="printCode">Design Print Guide</button>
+            <button class="tab" data-tab="personal" data-i18n="personalGallery">Personal Gallery</button>
+            <button class="tab" data-tab="gallery" data-i18n="publicGallery">Community Template Library</button>
+          </div>
+
+          <div class="tab-panel" id="printcode-panel">
+            <section class="print-guide-page" aria-label="Design print guide">
+              <header class="print-guide-title-row">
+                <button class="print-guide-title-toggle" type="button" aria-label="Expand tutorial catalog">
+                  <strong>从官网选择模板并上传打印</strong>
+                  <span aria-hidden="true">▽</span>
+                </button>
+              </header>
+
+              <div class="print-guide-frame">
+                <div class="print-guide-steps">
+                  <article class="print-guide-step">
+                    <span class="print-guide-step-icon" aria-hidden="true">▦</span>
+                    <h3>STEP1 选模板</h3>
+                    <div class="print-guide-copy">
+                      <p>具体步骤</p>
+                      <ul>
+                        <li>进入模板库</li>
+                        <li>选择适合甲形的模板</li>
+                        <li>确认打印预览</li>
+                      </ul>
+                    </div>
+                    <div class="print-guide-video"><span>▶</span><strong>视频片段</strong></div>
+                  </article>
+                  <article class="print-guide-step">
+                    <span class="print-guide-step-icon" aria-hidden="true">⌗</span>
+                    <h3>STEP2 扫描</h3>
+                    <div class="print-guide-copy">
+                      <p>具体步骤</p>
+                      <ul>
+                        <li>打开设备扫描页</li>
+                        <li>扫描打印二维码</li>
+                        <li>等待机器同步模板</li>
+                      </ul>
+                    </div>
+                    <div class="print-guide-video"><span>▶</span><strong>视频片段</strong></div>
+                  </article>
+                  <article class="print-guide-step">
+                    <span class="print-guide-step-icon" aria-hidden="true">☷</span>
+                    <h3>STEP3 调整打印</h3>
+                    <div class="print-guide-copy">
+                      <p>具体步骤</p>
+                      <ul>
+                        <li>检查甲片方向</li>
+                        <li>微调图案位置</li>
+                        <li>确认开始打印</li>
+                      </ul>
+                    </div>
+                    <div class="print-guide-video"><span>▶</span><strong>视频片段</strong></div>
+                  </article>
+                  <article class="print-guide-step">
+                    <span class="print-guide-step-icon" aria-hidden="true">◠</span>
+                    <h3>STEP4 涂胶烤干</h3>
+                    <div class="print-guide-copy">
+                      <p>具体步骤</p>
+                      <ul>
+                        <li>涂抹保护胶层</li>
+                        <li>按设备提示固化</li>
+                        <li>完成并取出甲片</li>
+                      </ul>
+                    </div>
+                    <div class="print-guide-video"><span>▶</span><strong>视频片段</strong></div>
+                  </article>
+                </div>
+              </div>
+
+              <div class="print-guide-actions">
+                <button class="print-guide-arrow print-guide-arrow-left" type="button" data-guide-target="canvas">去设计</button>
+                <button class="print-guide-arrow print-guide-arrow-right" type="button" id="choose-template-from-print" data-guide-target="gallery">去挑选模板</button>
+              </div>
+
+              <div class="print-guide-hidden-controls" aria-hidden="true">
+                <input id="print-code-input" value="NAIL-AI-2026" aria-label="Print code" />
+                <button id="activate-print-code" type="button" data-i18n="activate">Activate</button>
+                <p id="print-status" data-i18n="printStatusIdle">Waiting for activation.</p>
+                <div class="print-template-preview hidden" id="print-template-preview">
+                  <div class="print-template-image" id="print-template-image"></div>
+                  <strong id="print-template-name">Template Preview</strong>
+                  <p id="print-template-meta">Ready to print</p>
+                  <button id="print-template-action" data-i18n="printTemplateAction">Print</button>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div class="tab-panel" id="gallery-panel">
+            <div class="toolbar">
+              <div class="segmented" id="gallery-source">
+                <button class="active" data-source="official" data-i18n="officialGallery">Official Gallery</button>
+                <button data-source="community" data-i18n="communityGallery">Community Gallery</button>
+              </div>
+              <button class="primary-btn" id="upload-community-template" data-i18n="uploadTemplate">Upload Template</button>
+            </div>
+            <section class="gallery-filter-panel" aria-label="Gallery filters">
+              <div class="gallery-filter-head">
+                <p class="eyebrow" data-i18n="galleryFilterTitle">Filter Gallery</p>
+                <label class="gallery-search">
+                  <span>⌕</span>
+                  <input id="gallery-search" type="search" data-i18n-placeholder="gallerySearchPlaceholder" placeholder="Search designs" />
+                </label>
+              </div>
+              <div class="gallery-category-board" id="gallery-category-grid"></div>
+            </section>
+            <div class="design-grid" id="design-grid"></div>
+          </div>
+
+          <div class="tab-panel" id="personal-panel">
+            <section class="personal-gallery-block" id="d3-personal-subpage">
+              <div class="section-head compact">
+                <div>
+                  <p class="eyebrow" data-i18n="personalGallery">Personal Gallery</p>
+                  <h3 data-i18n="personalCanvasLibrary">Personal templates and favorites</h3>
+                </div>
+                <div class="personal-head-actions">
+                  <button class="ghost-btn personal-library-entry" type="button" data-open-template-library data-i18n="chooseTemplateFromLibrary">Choose from template library</button>
+                  <button class="ghost-btn personal-delete-toggle" id="personal-delete-toggle" type="button" data-i18n="deletePersonalTemplates">Delete</button>
+                </div>
+              </div>
+              <div class="personal-switch" id="personal-switch">
+                <button class="active" data-personal="favorites" data-i18n="myFavorites">My Favorites</button>
+              </div>
+              <div class="design-grid personal-design-grid" id="personal-design-grid"></div>
+            </section>
+          </div>
+
+          <div class="tab-panel active" id="canvas-panel">
+            <section id="d3-canvas-subpage">
+            <div class="personal-switch canvas-sub-switch" id="canvas-sub-switch">
+              <button class="active" data-canvas-subpage="canvas" data-i18n="designCanvas">Canvas</button>
+              <button data-canvas-subpage="drafts" data-i18n="myDrafts">My Drafts</button>
+            </div>
+            <div class="canvas-work-panel active" id="canvas-work-panel">
+            <div class="canvas-ai-header">
+              <div>
+                <p class="eyebrow" data-i18n="designCanvas">Design Canvas</p>
+                <span data-i18n="aiCanvasHint">Create nail designs or reusable assets with AI workflow samples.</span>
+              </div>
+              <div class="canvas-ai-actions">
+                <button id="open-ai-image" data-ai-flow="image" data-i18n="aiGenerateDesign">AI One-Click Image</button>
+                <button id="open-ai-asset" data-ai-flow="asset" data-i18n="aiGenerateAsset">AI One-Click Asset</button>
+              </div>
+            </div>
+            <div class="designer-board" id="designer-board">
+              <aside class="designer-left" aria-label="Design mode">
+                <div class="designer-mode-stack">
+                  <button class="designer-mode active" data-designer-mode="material" data-i18n="materialSelect">Material Selection</button>
+                  <button class="designer-mode" data-designer-mode="draw" data-i18n="patternDrawing">Pattern Drawing</button>
+                  <button class="designer-mode" data-designer-mode="import" data-i18n="importAssets">Import Assets</button>
+                </div>
+                <div class="left-brush-panel">
+                  <p data-i18n="brushList">Brush List</p>
+                  <div class="brush-list" id="brush-list">
+                    <button class="brush-option active" data-brush="pencil"><span aria-hidden="true">&#9998;</span><strong data-i18n="brushPencil">Pencil</strong></button>
+                    <button class="brush-option" data-brush="pixel"><span>◆</span><strong data-i18n="brushPixel">Pixel</strong></button>
+                    <button class="brush-option" data-brush="watercolor"><span>≈</span><strong data-i18n="brushWatercolor">Watercolor</strong></button>
+                    <button class="brush-option" data-brush="ballpoint"><span aria-hidden="true">&#8226;</span><strong data-i18n="brushBallpoint">Ballpoint</strong></button>
+                    <button class="brush-option" data-brush="crayon"><span>◆</span><strong data-i18n="brushCrayon">Crayon</strong></button>
+                  </div>
+                  <div class="brush-popover" id="brush-popover">
+                    <label><span data-i18n="opacity">Opacity</span><input id="brush-opacity" type="range" min="0.1" max="1" value="0.8" step="0.1" /></label>
+                    <label><span data-i18n="brushSize">Brush Size</span><input id="brush-size" type="range" min="2" max="34" value="10" step="1" /></label>
+                  </div>
+                  <div class="tool-mini-panel">
+                    <p data-i18n="toolPanel">Tools</p>
+                    <button class="brush-option tool-option" data-brush="select"><span>◆</span><strong data-i18n="brushSelect">Select</strong></button>
+                    <button class="brush-option tool-option" data-brush="eraser"><span>⌫</span><strong data-i18n="brushEraser">Eraser</strong></button>
+                    <button class="brush-option tool-option" data-brush="bucket"><span class="bucket-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4.5 13.4 13.4 4.5l6.1 6.1-8.9 8.9a2 2 0 0 1-2.8 0l-3.3-3.3a2 2 0 0 1 0-2.8Z"/><path d="M8.2 9.8h8.2"/><path d="M19.5 14.2c1.2 1.5 2 2.8 2 3.8a2 2 0 0 1-4 0c0-1 .8-2.3 2-3.8Z"/></svg></span><strong data-i18n="brushBucket">Bucket</strong></button>
+                  </div>
+                </div>
+              </aside>
+
+              <section class="designer-workspace">
+                <header class="finger-strip">
+                  <div class="finger-buttons" id="finger-buttons">
+                    <button class="finger-option active" data-finger="thumb" aria-label="Thumb"><span class="mini-nail shape-long-oval"></span></button>
+                    <button class="finger-option" data-finger="index" aria-label="Index finger"><span class="mini-nail shape-long-oval"></span></button>
+                    <button class="finger-option" data-finger="middle" aria-label="Middle finger"><span class="mini-nail shape-long-oval"></span></button>
+                    <button class="finger-option" data-finger="ring" aria-label="Ring finger"><span class="mini-nail shape-long-oval"></span></button>
+                    <button class="finger-option" data-finger="pinky" aria-label="Pinky finger"><span class="mini-nail shape-long-oval"></span></button>
+                  </div>
+                  <div class="shape-picker">
+                    <span data-i18n="nailShape">Nail Shape</span>
+                    <strong id="shape-label" data-i18n="shapeAlmond">Almond</strong>
+                    <button class="shape-next" id="shape-next" aria-label="Next nail shape">▶</button>
+                  </div>
+                </header>
+
+                <div class="canvas-editor">
+                  <div class="canvas-stage" id="canvas-stage">
+                    <div class="canvas-viewport" id="canvas-viewport">
+                      <div class="canvas-nail shape-long-oval material-m123" id="active-canvas-nail">
+                        <canvas id="asset-canvas" width="420" height="760"></canvas>
+                        <canvas id="nail-canvas" width="420" height="760"></canvas>
+                        <div class="object-box hidden" id="object-box"></div>
+                        <button class="object-edit hidden" id="object-edit" data-i18n="editAsset">Edit</button>
+                        <button class="object-rotate hidden" id="object-rotate" aria-label="Rotate asset">↻</button>
+                        <div class="selection-box" id="selection-box"></div>
+                        <div class="transform-grid hidden" id="transform-grid"></div>
+                      </div>
+                    </div>
+                    <div class="brush-cursor" aria-hidden="true"></div>
+                    <div class="history-actions">
+                      <button id="undo-action" title="Undo">↶</button>
+                      <button id="redo-action" title="Redo">↷</button>
+                    </div>
+                  </div>
+
+                <footer class="designer-actions">
+                  <button class="primary-btn" id="apply-design" data-i18n="applyDesign">Apply to Nail</button>
+                  <button class="ghost-btn" id="exit-design" data-i18n="exitDesign">Exit</button>
+                  <button class="ghost-btn" id="save-design" data-i18n="saveDesign">Save Design</button>
+                  <button class="ghost-btn" id="export-design" data-i18n="exportDesign">Export Design</button>
+                </footer>
+                </div>
+              </section>
+
+              <aside class="designer-right">
+                <div class="right-top">
+                  <button class="close-panel" id="hide-right-panel" aria-label="Hide right panel">×</button>
+                  <span data-i18n="listView">List</span>
+                </div>
+                <div class="dynamic-panel active" id="material-panel">
+                  <button class="color-wheel" id="material-color-wheel" aria-label="Open color wheel"></button>
+                  <div class="swatch-grid" id="material-swatches">
+                    <button class="swatch active" data-color="#ffe4ef" style="--swatch:#ffe4ef" aria-label="Pearl pink"></button>
+                    <button class="swatch" data-color="#cfd8ff" style="--swatch:#cfd8ff" aria-label="Chrome blue"></button>
+                    <button class="swatch" data-color="#d9fff7" style="--swatch:#d9fff7" aria-label="Glass mint"></button>
+                    <button class="swatch" data-color="#df5e93" style="--swatch:#df5e93" aria-label="Velvet rose"></button>
+                    <button class="swatch" data-color="#8c7cff" style="--swatch:#8c7cff" aria-label="Holographic violet"></button>
+                    <button class="swatch" data-color="#fff8fb" style="--swatch:#fff8fb" aria-label="Milk white"></button>
+                  </div>
+                  <p class="panel-subtitle" data-i18n="materialList">Material List</p>
+                  <div class="material-grid">
+                    <button class="material-tile active" data-material="m123"><img src="assets/materials/material-123.png" alt="" /><strong data-i18n="material123">123 White Nail</strong></button>
+                    <button class="material-tile" data-material="m124"><img src="assets/materials/material-124-cateye.png" alt="" /><strong data-i18n="material124">124 Regular Cat Eye</strong></button>
+                    <button class="material-tile" data-material="m125"><img src="assets/materials/material-125-gilded.png" alt="" /><strong data-i18n="material125">125 Gilded Nail</strong></button>
+                    <button class="material-tile" data-material="m126"><img src="assets/materials/material-126-rhinestone.png" alt="" /><strong data-i18n="material126">126 Rhinestone Nail</strong></button>
+                    <button class="material-tile" data-material="m127"><img src="assets/materials/material-127-cateye.png" alt="" /><strong data-i18n="material127">127 Cat Eye Nail</strong></button>
+                    <button class="material-tile" data-material="m128"><img src="assets/materials/material-128-gilded.png" alt="" /><strong data-i18n="material128">128 Gilded Nail</strong></button>
+                    <button class="material-tile" data-material="m130"><img src="assets/materials/material-130-rhinestone-cateye.png" alt="" /><strong data-i18n="material130">130 Rhinestone Cat Eye</strong></button>
+                  </div>
+                </div>
+
+                <div class="dynamic-panel" id="draw-panel">
+                  <button class="color-wheel" id="draw-color-wheel" aria-label="Open color wheel"></button>
+                  <div class="swatch-grid" id="draw-swatches">
+                    <button class="swatch active" data-color="#df5e93" style="--swatch:#df5e93" aria-label="Rose"></button>
+                    <button class="swatch" data-color="#8c7cff" style="--swatch:#8c7cff" aria-label="Violet"></button>
+                    <button class="swatch" data-color="#85e6d5" style="--swatch:#85e6d5" aria-label="Mint"></button>
+                    <button class="swatch" data-color="#ffffff" style="--swatch:#ffffff" aria-label="White"></button>
+                    <button class="swatch" data-color="#000000" style="--swatch:#000000" aria-label="Black"></button>
+                    <button class="swatch" data-color="#f7a8c8" style="--swatch:#f7a8c8" aria-label="Pink"></button>
+                    <button class="swatch" data-color="#ff4d6d" style="--swatch:#ff4d6d" aria-label="Red"></button>
+                    <button class="swatch" data-color="#ff9f1c" style="--swatch:#ff9f1c" aria-label="Orange"></button>
+                    <button class="swatch" data-color="#ffd447" style="--swatch:#ffd447" aria-label="Yellow"></button>
+                    <button class="swatch" data-color="#2ec4b6" style="--swatch:#2ec4b6" aria-label="Teal"></button>
+                    <button class="swatch" data-color="#3ac7ff" style="--swatch:#3ac7ff" aria-label="Blue"></button>
+                    <button class="swatch" data-color="#6a4cff" style="--swatch:#6a4cff" aria-label="Purple"></button>
+                    <button class="swatch" data-color="#8a5a44" style="--swatch:#8a5a44" aria-label="Brown"></button>
+                    <button class="swatch" data-color="#9ca3af" style="--swatch:#9ca3af" aria-label="Gray"></button>
+                    <button class="swatch" data-color="#f5d0fe" style="--swatch:#f5d0fe" aria-label="Lilac"></button>
+                    <button class="swatch add-swatch" id="add-color-swatch" aria-label="Add color">+</button>
+                  </div>
+                  <div class="panel-title-row">
+                    <p class="panel-subtitle" data-i18n="layerList">Layer List</p>
+                    <button id="new-layer" title="New layer">+</button>
+                  </div>
+                  <div class="layer-list" id="layer-list"></div>
+                </div>
+
+                <div class="dynamic-panel" id="import-panel">
+                  <label class="import-drop" for="local-asset-input">
+                    <span>+</span>
+                    <strong data-i18n="importLocalAsset">Import local image</strong>
+                  </label>
+                  <input class="hidden-file" id="local-asset-input" type="file" accept="image/*" />
+                  <p class="panel-subtitle" data-i18n="libraryAssets">Gallery Assets</p>
+                  <div class="import-list">
+                    <button data-library-asset="petal"><span class="asset-thumb petal"></span><strong data-i18n="assetPetal">Petal Outline</strong></button>
+                    <button data-library-asset="star"><span class="asset-thumb star"></span><strong data-i18n="assetStar">Future Star</strong></button>
+                    <button data-library-asset="ribbon"><span class="asset-thumb ribbon"></span><strong data-i18n="assetRibbon">Soft Ribbon</strong></button>
+                  </div>
+                </div>
+              </aside>
+              <button class="show-right-panel hidden" id="show-right-panel" aria-label="Show right panel">◉</button>
+            </div>
+            </div>
+            <div class="canvas-work-panel" id="canvas-drafts-panel">
+              <section class="personal-gallery-block canvas-draft-library">
+                <div class="section-head compact">
+                  <div>
+                    <p class="eyebrow" data-i18n="myDrafts">My Drafts</p>
+                    <h3 data-i18n="draftsEmpty">Your canvas drafts will appear here.</h3>
+                  </div>
+                  <button class="ghost-btn personal-delete-toggle" id="canvas-draft-delete-toggle" type="button" data-i18n="deletePersonalTemplates">Delete</button>
+                </div>
+                <div class="design-grid personal-design-grid" id="canvas-draft-grid"></div>
+              </section>
+            </div>
+            </section>
+          </div>
+
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <div class="modal hidden" id="auth-gate-modal">
+      <div class="auth-card auth-gate-card">
+        <p class="eyebrow">Member Login</p>
+        <h3>Would you like to log in?</h3>
+        <p class="muted">Log in to sync drafts, member rewards, and personal gallery data.</p>
+        <div class="auth-actions">
+          <button class="primary-btn" id="auth-gate-login" type="button">Yes, log in</button>
+          <button class="ghost-btn" id="auth-gate-guest" type="button">Continue as guest</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="login-modal">
+      <form class="auth-card login-card" id="login-form">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Member Login</p>
+            <h3>Log in to Nail Future</h3>
+          </div>
+          <button class="ghost-btn" id="close-login-modal" type="button">×</button>
+        </div>
+        <label class="auth-field">
+          <span>Username</span>
+          <input id="login-username" type="text" autocomplete="username" required />
+        </label>
+        <label class="auth-field">
+          <span>Password</span>
+          <input id="login-password" type="password" autocomplete="current-password" required />
+          <button class="auth-inline-link" id="forgot-password-link" type="button">Forgot password?</button>
+        </label>
+        <p class="auth-note">New users need to create an account and verify email or phone first.</p>
+        <p class="auth-error hidden" id="login-error"></p>
+        <div class="auth-actions">
+          <button class="primary-btn" type="submit">Log in</button>
+          <a class="ghost-btn auth-create-link" href="create-account.html">Create account</a>
+        </div>
+      </form>
+    </div>
+    <div class="modal hidden" id="forgot-password-modal">
+      <form class="auth-card login-card" id="forgot-password-form">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Account Recovery</p>
+            <h3>Reset password</h3>
+          </div>
+          <button class="ghost-btn" id="close-forgot-password" type="button">×</button>
+        </div>
+        <label class="auth-field">
+          <span>Email or phone</span>
+          <input id="forgot-target" type="text" required />
+        </label>
+        <button class="ghost-btn" id="forgot-request-code" type="button">Request verification code</button>
+        <div class="auth-code-panel hidden" id="forgot-code-panel">
+          <label class="auth-field">
+            <span>Verification code</span>
+            <input id="forgot-code" type="text" inputmode="numeric" />
+          </label>
+          <label class="auth-field">
+            <span>New password</span>
+            <input id="forgot-new-password" type="password" autocomplete="new-password" />
+          </label>
+        </div>
+        <p class="auth-error hidden" id="forgot-error"></p>
+        <p class="auth-note hidden" id="forgot-dev-code"></p>
+        <button class="primary-btn" type="submit">Reset password</button>
+      </form>
+    </div>
+    <div class="modal hidden" id="template-detail-modal">
+      <div class="template-detail-card">
+        <div class="template-detail-main">
+          <div class="template-detail-image" id="template-detail-image"></div>
+          <div class="template-detail-copy">
+            <h3 id="template-detail-name">Template name</h3>
+            <p class="muted" id="template-detail-description">Template description</p>
+          </div>
+        </div>
+        <aside class="template-detail-side">
+          <button class="template-detail-close" id="close-template-detail" aria-label="Close template detail">×</button>
+          <div class="template-author-row">
+            <div class="template-author-avatar" id="template-author-avatar">AI</div>
+            <div>
+              <strong id="template-author-name">Creator</strong>
+              <p class="muted" id="template-author-meta">ID · Level</p>
+            </div>
+          </div>
+          <div class="template-tag-stack" id="template-detail-tags"></div>
+          <div class="template-detail-actions">
+            <button class="primary-btn" id="use-template-canvas" data-i18n="useInCanvas">Use in Canvas</button>
+            <button class="card-action" id="use-template-print" data-i18n="useTemplatePrint">Use This Template to Print</button>
+          </div>
+          <section class="template-comments">
+            <div class="template-comments-head">
+              <strong data-i18n="templateComments">Comments</strong>
+              <span id="template-comments-count">0</span>
+            </div>
+            <div class="template-comments-list" id="template-comments-list"></div>
+            <form class="template-comment-form" id="template-comment-form">
+              <p class="template-comment-reply-target hidden" id="template-comment-reply-target"></p>
+              <textarea id="template-comment-input" rows="2" placeholder="Write a comment"></textarea>
+              <div class="template-comment-submit-row">
+                <button class="ghost-btn hidden" id="cancel-template-reply" type="button">Cancel reply</button>
+                <button class="primary-btn" type="submit">Send</button>
+              </div>
+            </form>
+          </section>
+        </aside>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="delete-template-modal">
+      <div class="choice-card delete-template-card">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow" data-i18n="personalGallery">Personal Gallery</p>
+            <h3 data-i18n="deleteTemplateConfirm">Delete this template?</h3>
+          </div>
+        </div>
+        <div class="choice-actions">
+          <button class="primary-btn" id="confirm-delete-template" data-i18n="yesDelete">Yes</button>
+          <button class="ghost-btn" id="cancel-delete-template" data-i18n="noCancel">No</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="community-template-modal">
+      <form class="community-template-card" id="community-template-form">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow" data-i18n="communityGallery">Community Gallery</p>
+            <h3 data-i18n="uploadTemplate">Upload Template</h3>
+          </div>
+          <button class="template-detail-close" id="close-community-template-upload" type="button" aria-label="Close">X</button>
+        </div>
+        <div class="community-upload-layout">
+          <label class="community-upload-drop">
+            <input id="community-template-image" type="file" accept="image/png,image/jpeg,image/webp" />
+            <span id="community-template-empty">
+              <strong>+</strong>
+              <em data-i18n="templateImage">Template image</em>
+            </span>
+            <img id="community-template-preview" alt="Template preview" hidden />
+          </label>
+          <div class="community-upload-fields">
+            <label>
+              <span data-i18n="templateName">Template name</span>
+              <input id="community-template-name" required />
+            </label>
+            <label>
+              <span data-i18n="templateDescription">Description</span>
+              <textarea id="community-template-description" rows="3"></textarea>
+            </label>
+            <div class="community-upload-grid">
+              <label>
+                <span data-i18n="nailShapeCategory">Nail shape</span>
+                <select id="community-template-shape"></select>
+              </label>
+              <label>
+                <span data-i18n="styleCategory">Style</span>
+                <select id="community-template-style"></select>
+              </label>
+              <label>
+                <span data-i18n="materialCategory">Material</span>
+                <select id="community-template-material"></select>
+              </label>
+              <label>
+                <span data-i18n="designTypeCategory">Design type</span>
+                <select id="community-template-design-type">
+                  <option value="nail" data-i18n="designTypeNail">Nail Template</option>
+                  <option value="accessory" data-i18n="designTypeAccessory">Accessory</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              <span data-i18n="templateTags">Tags</span>
+              <input id="community-template-tags" placeholder="sweet, chrome, pink" />
+            </label>
+            <p class="muted" id="community-template-upload-status"></p>
+            <button class="primary-btn" type="submit" data-i18n="submitTemplate">Submit Template</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="modal hidden" id="ai-workflow-modal">
+      <div class="ai-workflow-card">
+        <button class="ai-workflow-close" id="close-ai-workflow" aria-label="Close AI workflow">X</button>
+        <nav class="ai-step-nav" aria-label="AI workflow steps">
+          <button class="active" data-ai-step="1" data-i18n="aiStep1">step1 Input Request</button>
+          <button data-ai-step="2" data-i18n="aiStep2">step2 Results</button>
+          <button data-ai-step="3" data-i18n="aiStep3">step3 Preview & Export</button>
+        </nav>
+        <div class="ai-step-pages">
+          <section class="ai-step-page active" data-ai-page="1">
+            <h3 data-i18n="aiStep1Title">Input generation request</h3>
+            <label class="ai-field">
+              <span data-i18n="aiModelSelect">Model Selection</span>
+              <select id="ai-model-select">
+                <option value="" data-i18n="aiModelBlank">Select a model</option>
+                <option value="black-forest-labs/FLUX.1-schnell">FLUX.1 Schnell</option>
+                <option value="black-forest-labs/FLUX.1-dev">FLUX.1 Dev</option>
+                <option value="stabilityai/stable-diffusion-3.5-large">Stable Diffusion 3.5 Large</option>
+                <option value="seedream-4-5-251128" selected>ByteDance Seedream 4.5</option>
+              </select>
+            </label>
+            <div class="ai-field">
+              <span data-i18n="aiStyleTags">Style Tags</span>
+              <div class="ai-sample-tags" id="ai-style-tags">
+                <button type="button" data-ai-style="elegant">Elegant</button>
+                <button type="button" data-ai-style="minimal">Minimal</button>
+                <button type="button" data-ai-style="future">Future</button>
+                <button type="button" data-ai-style="chrome">Chrome</button>
+                <button type="button" data-ai-style="cute">Cute</button>
+                <button type="button" data-ai-style="luxury">Luxury</button>
+                <button type="button" data-ai-style="floral">Floral</button>
+                <button type="button" data-ai-style="festival">Festival</button>
+              </div>
+            </div>
+            <label class="ai-field ai-prompt-field">
+              <span data-i18n="aiPromptLabel">Request Description</span>
+              <textarea id="ai-prompt-input" data-i18n-placeholder="aiPromptPlaceholder" placeholder="Soft pink futuristic French tips with chrome accents"></textarea>
+            </label>
+            <div class="ai-field">
+              <span data-i18n="aiReferenceUpload">Upload reference image (optional)</span>
+              <div class="ai-reference-grid" id="ai-reference-grid">
+                <label class="ai-reference-add" for="ai-reference-input">+</label>
+              </div>
+              <input class="hidden-file" id="ai-reference-input" type="file" accept="image/*" multiple />
+            </div>
+            <div class="ai-generate-row">
+              <button class="primary-btn" id="ai-generate-submit" data-i18n="aiGenerateNow">Generate</button>
+              <span id="ai-generate-status" data-i18n="aiReady">Ready to generate.</span>
+            </div>
+          </section>
+          <section class="ai-step-page" data-ai-page="2">
+            <h3 data-i18n="aiStep2Title">Generated results</h3>
+            <div class="ai-results-layout">
+              <div class="ai-result-main" id="ai-result-main"></div>
+              <div class="ai-result-grid" id="ai-result-grid">
+                <button data-ai-sample-result="1"><span></span><strong>01 Aurora Blush</strong></button>
+                <button data-ai-sample-result="2"><span></span><strong>02 Pearl Circuit</strong></button>
+                <button data-ai-sample-result="3"><span></span><strong>03 Chrome Petal</strong></button>
+              </div>
+            </div>
+            <div class="ai-regenerate-panel">
+              <button class="ghost-btn" id="ai-regenerate-toggle" data-i18n="aiRegenerate">Regenerate</button>
+              <div class="ai-regenerate-box hidden" id="ai-regenerate-box">
+                <textarea id="ai-regenerate-input" data-i18n-placeholder="aiRegeneratePlaceholder" placeholder="Optional extra request for the next generation"></textarea>
+                <button class="primary-btn" id="ai-regenerate-submit" data-i18n="aiRegenerate">Regenerate</button>
+                <small class="ai-regenerate-hint hidden" id="ai-regenerate-hint" data-i18n="aiRegeneratingHint">Generating new results...</small>
+              </div>
+              <button class="primary-btn" id="ai-next-preview" data-i18n="aiNextStep">Next</button>
+            </div>
+          </section>
+          <section class="ai-step-page" data-ai-page="3">
+            <h3 data-i18n="aiStep3Title">Preview & export</h3>
+            <div class="ai-preview-layout">
+              <div class="ai-hand-preview" id="ai-hand-preview"></div>
+              <div class="ai-export-actions">
+                <button class="primary-btn" id="ai-save-gallery" data-i18n="aiExportTemplate">Export to Template</button>
+                <button class="ghost-btn" id="ai-export-local" data-i18n="aiExportLocal">Export to Local</button>
+                <button class="ghost-btn" id="ai-print-direct" data-i18n="aiPrintDirect">Print Directly</button>
+                <button class="ghost-btn" id="ai-share-placeholder" data-i18n="aiShare">Share</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="apply-target-modal">
+      <div class="choice-card">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Apply Design</p>
+            <h3>Select target nail</h3>
+          </div>
+          <button class="ghost-btn" id="close-apply-target">×</button>
+        </div>
+        <div class="choice-stack">
+          <button data-apply-target="thumb">Thumb</button>
+          <button data-apply-target="index">Index finger</button>
+          <button data-apply-target="middle">Middle finger</button>
+          <button data-apply-target="ring">Ring finger</button>
+          <button data-apply-target="pinky">Pinky finger</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="save-choice-modal">
+      <div class="choice-card">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Save Design</p>
+            <h3>Choose save mode</h3>
+          </div>
+          <button class="ghost-btn" id="close-save-choice">×</button>
+        </div>
+        <div class="choice-stack">
+          <button id="confirm-save-design">Save</button>
+          <button id="save-design-as">Save As</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="exit-choice-modal">
+      <div class="choice-card">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow" data-i18n="exitDesign">Exit</p>
+            <h3 data-i18n="exitConfirmTitle">Save before exiting?</h3>
+          </div>
+          <button class="ghost-btn" id="cancel-exit-choice">×</button>
+        </div>
+        <div class="choice-stack">
+          <button id="exit-save-yes" data-i18n="yesSaveExit">Yes, save draft</button>
+          <button id="exit-save-no" data-i18n="noExit">No, exit directly</button>
+          <button id="exit-save-cancel" data-i18n="cancelExit">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="coupon-modal">
+      <div class="coupon-card">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow" data-i18n="couponUseTitle">Coupon Use</p>
+            <h3 id="coupon-modal-title" data-i18n="selectBenefitCoupon">Select a benefit coupon</h3>
+          </div>
+          <button class="ghost-btn" id="close-coupon-modal">×</button>
+        </div>
+        <div class="coupon-grid" id="coupon-grid"></div>
+        <div class="coupon-detail hidden" id="coupon-detail">
+          <article class="coupon-detail-main">
+            <span class="tag" id="coupon-detail-type">Discount</span>
+            <h3 id="coupon-detail-name">Coupon</h3>
+            <p class="muted" id="coupon-detail-activity">Activity</p>
+            <p class="muted" id="coupon-detail-valid">Valid until</p>
+            <p id="coupon-detail-copy">Coupon detail</p>
+          </article>
+          <label class="coupon-device-select">
+            <span data-i18n="selectDevice">Select Device</span>
+            <select id="coupon-device">
+              <option>Boxhill1</option>
+              <option>Boxhill2</option>
+              <option>Chadstone Maita</option>
+              <option>DFO South Wharf</option>
+            </select>
+          </label>
+          <button class="primary-btn" id="activate-selected-coupon" data-i18n="activate">Activate</button>
+        </div>
+        <p class="coupon-machine-screen hidden" id="coupon-machine-screen"></p>
+      </div>
+    </div>
+    <div class="modal hidden" id="cart-modal">
+      <div class="cart-card">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow" data-i18n="cartEyebrow">Shopping Cart</p>
+            <h3 data-i18n="cartTitle">Your press-on nail cart</h3>
+          </div>
+          <button class="ghost-btn" id="close-cart">×</button>
+        </div>
+        <div class="cart-list" id="cart-list"></div>
+        <div class="cart-summary">
+          <p><span data-i18n="cartSubtotal">Subtotal</span><strong id="cart-subtotal">$0.00</strong></p>
+          <p><span data-i18n="cartDiscount">Discount</span><strong id="cart-discount">-$0.00</strong></p>
+          <p class="cart-total"><span data-i18n="cartTotal">Total</span><strong id="cart-total">$0.00</strong></p>
+        </div>
+        <a class="primary-btn cart-checkout" href="checkout.html" data-i18n="checkout">Checkout</a>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="product-filter-modal">
+      <div class="product-filter-card">
+        <button class="product-filter-close" id="close-product-filters" aria-label="Close product filters">×</button>
+        <h3 data-i18n="productFilterTitle">Categories</h3>
+        <div class="product-filter-modal-body" id="product-category-modal-grid"></div>
+      </div>
+    </div>
+    <div class="modal hidden" id="product-detail-modal">
+      <div class="product-detail-card">
+        <button class="product-detail-close" id="close-product-detail" aria-label="Close product detail">×</button>
+        <div class="product-detail-image" id="product-detail-image"></div>
+        <div class="product-detail-copy">
+          <p class="eyebrow" id="product-detail-id">P-0000</p>
+          <h3 id="product-detail-name">Product name</h3>
+          <p id="product-detail-description">Product description</p>
+          <div class="product-detail-tags" id="product-detail-tags"></div>
+          <strong class="product-detail-price" id="product-detail-price">$0.00</strong>
+          <div class="product-detail-options">
+            <div class="product-detail-size-block">
+              <span class="product-detail-label" data-i18n="size">Size</span>
+              <div class="product-size-grid" id="product-size-grid"></div>
+            </div>
+            <div class="product-detail-stock-row">
+              <span class="product-detail-label" data-i18n="stock">Stock</span>
+              <strong id="product-detail-stock">0</strong>
+            </div>
+            <label class="product-detail-qty">
+              <span class="product-detail-label" data-i18n="quantity">Quantity</span>
+              <input id="product-detail-qty" type="number" min="1" value="1" />
+            </label>
+            <div class="product-detail-total-row">
+              <span class="product-detail-label" data-i18n="cartTotal">Total</span>
+              <strong id="product-detail-total">$0.00</strong>
+            </div>
+            <div class="product-fulfillment-block">
+              <span class="product-detail-label" data-i18n="pickupOption">Pickup Option</span>
+              <div class="product-fulfillment-options" id="product-fulfillment-options"></div>
+            </div>
+          </div>
+          <div class="product-detail-actions">
+            <a class="primary-btn" id="buy-product-now" href="checkout.html" data-i18n="buyNow">Buy</a>
+            <button class="ghost-btn" id="add-product-cart" data-i18n="addToCart">Add to Cart</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden" id="asset-editor">
+      <div class="asset-editor-card">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow" data-i18n="editAsset">Edit Asset</p>
+            <h3 data-i18n="assetAdjustments">Asset Adjustments</h3>
+          </div>
+          <button class="ghost-btn" id="close-asset-editor">×</button>
+        </div>
+        <div class="editor-grid">
+          <div class="editor-preview" id="editor-preview">
+            <img id="editor-preview-image" alt="" />
+            <div class="editor-selection" id="editor-selection"></div>
+            <div class="editor-transform-grid hidden" id="editor-transform-grid"></div>
+          </div>
+          <div class="editor-controls">
+            <div class="asset-edit-actions">
+              <button class="ghost-btn" id="asset-free-select" data-i18n="freeSelect">Free Select</button>
+              <button class="ghost-btn" id="asset-rect-select" data-i18n="rectSelect">Rect Select</button>
+              <button class="ghost-btn" id="asset-crop-selection" data-i18n="cropSelection">Crop Selection</button>
+              <button class="ghost-btn" id="asset-undo">↶</button>
+              <button class="ghost-btn" id="asset-redo">↷</button>
+            </div>
+            <label><span data-i18n="hue">Hue</span><input id="asset-hue" type="range" min="-180" max="180" value="0" /></label>
+            <label><span data-i18n="saturation">Saturation</span><input id="asset-saturation" type="range" min="0" max="2" value="1" step="0.05" /></label>
+            <label><span data-i18n="opacity">Opacity</span><input id="asset-opacity" type="range" min="0" max="1" value="1" step="0.05" /></label>
+            <label><span data-i18n="brightness">Brightness</span><input id="asset-brightness" type="range" min="0.4" max="1.8" value="1" step="0.05" /></label>
+            <button class="primary-btn asset-apply" id="apply-asset-edit" data-i18n="applyAssetEdit">Apply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="color-modal hidden" id="color-modal">
+      <div class="color-card">
+        <button class="close-panel" id="close-color-modal" aria-label="Close color picker">×</button>
+        <div class="color-picker-layout">
+          <canvas id="color-strip-canvas" width="34" height="260" aria-label="Color strip"></canvas>
+          <canvas id="color-plane-canvas" width="260" height="260" aria-label="Color plane"></canvas>
+        </div>
+        <div class="color-rgb-row">
+          <label><span>R</span><input id="color-r-input" type="number" min="0" max="255" value="223" /></label>
+          <label><span>G</span><input id="color-g-input" type="number" min="0" max="255" value="94" /></label>
+          <label><span>B</span><input id="color-b-input" type="number" min="0" max="255" value="147" /></label>
+        </div>
+        <div class="color-quick-picks" aria-label="Quick colors">
+          <button data-quick-color="#000000" style="--swatch:#000000" aria-label="Black"></button>
+          <button data-quick-color="#ffffff" style="--swatch:#ffffff" aria-label="White"></button>
+          <span class="color-preview-label">Preview</span>
+          <span class="color-selection-preview" id="color-selection-preview" style="--selected-color:#df5e93"></span>
+        </div>
+        <button class="color-confirm-btn" id="confirm-color-swatch" type="button">Confirm</button>
+        <button class="eyedropper-btn" id="eyedropper-btn" title="Eyedropper">◎</button>
+      </div>
+    </div>
+    <script src="app.js?v=112"></script>
+  </body>
+</html>
+
+

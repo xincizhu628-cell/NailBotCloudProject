@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Login | AI Nail Studio</title>
+    <style>
+      :root {
+        --pink: #df5e93;
+        --pink-soft: #fff0f6;
+        --violet: #8c7cff;
+        --ink: #2d2330;
+        --muted: #756b78;
+        --line: #f1dbe7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 18% 20%, rgba(223, 94, 147, .18), transparent 30%),
+          radial-gradient(circle at 82% 18%, rgba(140, 124, 255, .16), transparent 28%),
+          linear-gradient(135deg, #fff9fc, #f8fbff);
+        color: var(--ink);
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+      }
+
+      .login-card {
+        width: min(420px, 100%);
+        padding: 30px;
+        border: 1px solid rgba(223, 94, 147, .16);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, .92);
+        box-shadow: 0 26px 80px rgba(88, 47, 91, .16);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--pink);
+        font-size: .76rem;
+        font-weight: 900;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(1.7rem, 5vw, 2.35rem);
+        line-height: 1.05;
+      }
+
+      .hint {
+        margin: 0 0 22px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      form {
+        display: grid;
+        gap: 14px;
+      }
+
+      label {
+        display: grid;
+        gap: 7px;
+        color: var(--muted);
+        font-size: .84rem;
+        font-weight: 850;
+      }
+
+      input {
+        width: 100%;
+        min-height: 46px;
+        padding: 0 13px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        color: var(--ink);
+        font: inherit;
+        font-weight: 700;
+        outline: none;
+        background: #fff;
+      }
+
+      input:focus {
+        border-color: rgba(223, 94, 147, .72);
+        box-shadow: 0 0 0 4px rgba(223, 94, 147, .12);
+      }
+
+      button {
+        min-height: 48px;
+        border: 0;
+        border-radius: 9px;
+        color: #fff;
+        font: inherit;
+        font-weight: 950;
+        cursor: pointer;
+        background: linear-gradient(135deg, var(--pink), var(--violet));
+        box-shadow: 0 14px 34px rgba(223, 94, 147, .24);
+      }
+
+      .create-link {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(223, 94, 147, .22);
+        border-radius: 9px;
+        color: var(--pink);
+        font-weight: 900;
+        text-decoration: none;
+        background: #fff;
+      }
+
+      button:disabled {
+        opacity: .64;
+        cursor: wait;
+      }
+
+      .status {
+        min-height: 20px;
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: .86rem;
+        font-weight: 760;
+      }
+
+      .status.error {
+        color: #c51f4a;
+      }
+
+      .status.ok {
+        color: #267a5a;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="login-card">
+      <p class="eyebrow">AI Nail Studio Admin</p>
+      <h1>Admin Login</h1>
+      <p class="hint">Please sign in with an administrator ID before entering the B-side management dashboard.</p>
+      <form id="admin-login-form">
+        <label>
+          Admin ID
+          <input name="adminId" autocomplete="username" required placeholder="admin" />
+        </label>
+        <label>
+          Password
+          <input name="password" type="password" autocomplete="current-password" required placeholder="admin123" />
+        </label>
+        <button type="submit">Enter Admin Dashboard</button>
+        <a class="create-link" href="/admin-create-account.html">Create admin account</a>
+        <p class="status" id="login-status">Default test account: admin / admin123</p>
+      </form>
+    </main>
+
+    <script>
+      const form = document.querySelector("#admin-login-form");
+      const statusNode = document.querySelector("#login-status");
+      const button = form.querySelector("button");
+
+      function setStatus(message, type = "") {
+        statusNode.textContent = message;
+        statusNode.className = `status ${type}`;
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        button.disabled = true;
+        button.textContent = "Signing in...";
+        setStatus("Checking administrator credentials...");
+        try {
+          const response = await fetch("/api/admin/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          const result = await response.json();
+          if (!response.ok || !result.ok) throw new Error(result.error || "Login failed.");
+          setStatus("Login success. Opening admin dashboard...", "ok");
+          const target = new URLSearchParams(location.search).get("return") || "/admin.html";
+          location.href = target.startsWith("/") ? target : "/admin.html";
+        } catch (error) {
+          setStatus(error.message || "Login failed.", "error");
+          button.disabled = false;
+          button.textContent = "Enter Admin Dashboard";
+        }
+      });
+    </script>
+  </body>
+</html>

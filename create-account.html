@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Account - AI Nail Studio</title>
+    <link rel="stylesheet" href="styles.css?v=112" />
+  </head>
+  <body class="auth-page">
+    <main class="auth-page-shell">
+      <section class="auth-card create-account-card">
+        <p class="eyebrow">Member Account</p>
+        <h1>Create account</h1>
+        <p class="muted">Bind an email or phone number, verify it, then create your Nail Future login.</p>
+        <form id="create-account-form">
+          <label class="auth-field">
+            <span>Username</span>
+            <input id="create-username" type="text" autocomplete="username" required />
+          </label>
+          <label class="auth-field">
+            <span>Password</span>
+            <input id="create-password" type="password" autocomplete="new-password" required />
+          </label>
+          <label class="auth-field">
+            <span>Email or phone</span>
+            <input id="create-target" type="text" required />
+          </label>
+          <button class="ghost-btn" id="create-request-code" type="button">Request verification code</button>
+          <div class="auth-code-panel hidden" id="create-code-panel">
+            <label class="auth-field">
+              <span>Verification code</span>
+              <input id="create-code" type="text" inputmode="numeric" />
+            </label>
+          </div>
+          <p class="auth-error hidden" id="create-error"></p>
+          <p class="auth-note hidden" id="create-dev-code"></p>
+          <div class="auth-actions">
+            <button class="primary-btn" type="submit">Create account</button>
+            <a class="ghost-btn auth-create-link" href="index.html">Back to login</a>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="create-account.js"></script>
+  </body>
+</html>

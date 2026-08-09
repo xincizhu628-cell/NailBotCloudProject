@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Checkout - AI Nail Studio</title>
+    <style>
+      :root {
+        --pink: #df5e93;
+        --pink-soft: #ffe6f0;
+        --violet: #8c7cff;
+        --mint: #dff8f4;
+        --ink: #2d2330;
+        --muted: #6d5c70;
+        --line: rgba(111, 77, 97, 0.14);
+        --card: rgba(255, 255, 255, 0.9);
+        --shadow: 0 24px 70px rgba(208, 106, 156, 0.16);
+        --ok: #1f8c73;
+        --warn: #a0592b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(255, 194, 220, 0.28), transparent 34%),
+          linear-gradient(135deg, #fff9fc 0%, #fff7fb 52%, #f7fbff 100%);
+      }
+
+      .page {
+        width: min(1160px, calc(100vw - 32px));
+        margin: 28px auto;
+        display: grid;
+        gap: 20px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .topbar small {
+        color: var(--muted);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(300px, 380px) minmax(340px, 1fr);
+        gap: 20px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+        box-shadow: var(--shadow);
+      }
+
+      .summary {
+        padding: 22px;
+      }
+
+      .summary h1,
+      .payment h2 {
+        margin: 0;
+        font-size: 1.35rem;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--pink);
+        font-size: 0.8rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .summary-copy {
+        margin: 10px 0 18px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(140, 124, 255, 0.12);
+        color: #4c3dd2;
+        font-size: 0.85rem;
+        font-weight: 700;
+      }
+
+      .badge.demo {
+        background: rgba(255, 194, 108, 0.2);
+        color: var(--warn);
+      }
+
+      .order-list {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .order-line {
+        display: grid;
+        grid-template-columns: 56px 1fr auto;
+        gap: 12px;
+        align-items: center;
+        padding: 10px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(111, 77, 97, 0.08);
+      }
+
+      .thumb {
+        width: 56px;
+        height: 72px;
+        border-radius: 10px;
+        background: linear-gradient(160deg, #fff 0 34%, #ffd6e8 35% 68%, #c3fff4 69%);
+        background-position: center;
+        background-size: cover;
+        border: 1px solid rgba(111, 77, 97, 0.08);
+      }
+
+      .order-line strong,
+      .order-line small,
+      .totals-row span,
+      .totals-row strong {
+        display: block;
+      }
+
+      .order-line small {
+        margin-top: 4px;
+        color: var(--muted);
+      }
+
+      .totals {
+        display: grid;
+        gap: 10px;
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+      }
+
+      .totals-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .totals-row span {
+        color: var(--muted);
+      }
+
+      .totals-row.total strong {
+        font-size: 1.2rem;
+        color: var(--pink);
+      }
+
+      .payment {
+        padding: 22px;
+      }
+
+      .payment-copy {
+        margin: 10px 0 18px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field.full {
+        grid-column: 1 / -1;
+      }
+
+      label {
+        color: var(--muted);
+        font-size: 0.86rem;
+        font-weight: 700;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        min-height: 46px;
+        padding: 12px 14px;
+        border: 1px solid rgba(111, 77, 97, 0.18);
+        border-radius: 10px;
+        background: #fff;
+        font: inherit;
+        color: var(--ink);
+      }
+
+      textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+
+      #card-container {
+        min-height: 88px;
+        padding: 14px;
+        border: 1px solid rgba(111, 77, 97, 0.18);
+        border-radius: 12px;
+        background: #fff;
+      }
+
+      .card-shell {
+        margin-top: 6px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .card-note {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .status {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        background: rgba(140, 124, 255, 0.08);
+        color: #4c3dd2;
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .status.ok {
+        background: rgba(31, 140, 115, 0.12);
+        color: var(--ok);
+      }
+
+      .status.error {
+        background: rgba(223, 94, 147, 0.12);
+        color: #b32565;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .primary-btn,
+      .ghost-btn {
+        min-height: 48px;
+        border-radius: 10px;
+        font: 800 0.98rem Inter, Arial, sans-serif;
+        cursor: pointer;
+      }
+
+      .primary-btn {
+        flex: 1;
+        border: 0;
+        color: #fff;
+        background: linear-gradient(135deg, var(--pink), var(--violet));
+      }
+
+      .ghost-btn {
+        padding: 0 18px;
+        border: 1px solid rgba(111, 77, 97, 0.18);
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--ink);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .empty {
+        padding: 24px;
+        border-radius: 12px;
+        border: 1px dashed rgba(111, 77, 97, 0.18);
+        color: var(--muted);
+        text-align: center;
+      }
+
+      @media (max-width: 860px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .actions {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="topbar">
+        <a class="back-link" href="/index.html?view=products">&#8592; Back to AI Nail Studio</a>
+        <small id="env-copy">Preparing checkout...</small>
+      </div>
+
+      <section class="layout">
+        <article class="panel summary">
+          <p class="eyebrow">Order Summary</p>
+          <h1>Square test checkout</h1>
+          <p class="summary-copy">
+            This page is wired for a real Square test flow. If Square keys are not configured yet, it falls back to a safe local demo so we can still test the full page experience.
+          </p>
+          <div id="mode-badge" class="badge">Loading payment mode...</div>
+          <div id="order-list" class="order-list"></div>
+          <div class="totals">
+            <div class="totals-row"><span>Subtotal</span><strong id="subtotal">$0.00</strong></div>
+            <div class="totals-row"><span>Discount</span><strong id="discount">-$0.00</strong></div>
+            <div class="totals-row total"><span>Total</span><strong id="total">$0.00</strong></div>
+          </div>
+        </article>
+
+        <article class="panel payment">
+          <p class="eyebrow">Payment</p>
+          <h2>Card payment test</h2>
+          <p class="payment-copy">
+            Use this page to test a browser-based card flow for your press-on nail orders. Once Square sandbox keys are added, this panel becomes a real secure card entry area.
+          </p>
+
+          <form id="checkout-form">
+            <div class="form-grid">
+              <div class="field">
+                <label for="given-name">First name</label>
+                <input id="given-name" name="givenName" autocomplete="given-name" placeholder="Mia" />
+              </div>
+              <div class="field">
+                <label for="family-name">Last name</label>
+                <input id="family-name" name="familyName" autocomplete="family-name" placeholder="Zhang" />
+              </div>
+              <div class="field full">
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email" autocomplete="email" placeholder="mia@example.com" />
+              </div>
+              <div class="field full">
+                <label for="address1">Address line 1</label>
+                <input id="address1" name="address1" autocomplete="address-line1" placeholder="88 Collins Street" />
+              </div>
+              <div class="field">
+                <label for="city">City</label>
+                <input id="city" name="city" autocomplete="address-level2" placeholder="Melbourne" />
+              </div>
+              <div class="field">
+                <label for="state">State</label>
+                <input id="state" name="state" autocomplete="address-level1" placeholder="VIC" />
+              </div>
+              <div class="field">
+                <label for="postal-code">Postal code</label>
+                <input id="postal-code" name="postalCode" autocomplete="postal-code" placeholder="3000" />
+              </div>
+              <div class="field">
+                <label for="phone">Phone</label>
+                <input id="phone" name="phone" autocomplete="tel" placeholder="+61 4xx xxx xxx" />
+              </div>
+              <div class="field full">
+                <label for="order-note">Order note</label>
+                <textarea id="order-note" name="orderNote" placeholder="Optional note for this order"></textarea>
+              </div>
+              <div class="field full">
+                <label>Card details</label>
+                <div class="card-shell">
+                  <div id="card-container"></div>
+                  <div class="card-note" id="card-note">Loading payment form...</div>
+                </div>
+              </div>
+            </div>
+
+            <div id="status" class="status">Loading Square checkout configuration...</div>
+
+            <div class="actions">
+              <a class="ghost-btn" href="/index.html?view=products">Keep browsing</a>
+              <button class="primary-btn" id="pay-btn" type="submit">Pay now</button>
+            </div>
+          </form>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const CHECKOUT_DRAFT_KEY = "nailStudioCheckoutDraftV1";
+      const PRODUCT_CART_KEY = "nailStudioProductCartV1";
+
+      const state = {
+        config: null,
+        draft: null,
+        catalog: null,
+        card: null,
+        payments: null,
+      };
+
+      function money(value) {
+        return `$${Number(value || 0).toFixed(2)}`;
+      }
+
+      function setStatus(message, kind = "") {
+        const node = document.getElementById("status");
+        node.textContent = message;
+        node.className = `status${kind ? ` ${kind}` : ""}`;
+      }
+
+      function productImage(item) {
+        if (!item) return "";
+        if (item.image) return item.image;
+        if (item.image_url) return item.image_url;
+        if (item.image_base64) {
+          return /^data:image\//i.test(item.image_base64)
+            ? item.image_base64
+            : `data:image/png;base64,${item.image_base64}`;
+        }
+        return "";
+      }
+
+      async function loadJson(url, options) {
+        const response = await fetch(url, options);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || `Request failed: ${response.status}`);
+        }
+        return payload;
+      }
+
+      async function loadConfig() {
+        state.config = await loadJson("/api/square-config");
+        document.getElementById("env-copy").textContent = state.config.enabled
+          ? `Square ${state.config.environment} is ready for browser card testing`
+          : "Square keys are missing, so checkout is running in local demo mode";
+        const badge = document.getElementById("mode-badge");
+        if (state.config.enabled) {
+          badge.textContent = `Square ${state.config.environment}`;
+          badge.classList.remove("demo");
+        } else {
+          badge.textContent = "Local demo fallback";
+          badge.classList.add("demo");
+        }
+      }
+
+      async function loadCatalog() {
+        const payload = await loadJson("/api/public-catalog");
+        state.catalog = payload.data || {};
+      }
+
+      function findProductById(id) {
+        const list = Array.isArray(state.catalog?.products) ? state.catalog.products : [];
+        return list.find((item) => String(item.id) === String(id));
+      }
+
+      function buildDraftFromCart() {
+        const raw = localStorage.getItem(PRODUCT_CART_KEY);
+        if (!raw) return null;
+        let lines;
+        try {
+          lines = JSON.parse(raw);
+        } catch {
+          return null;
+        }
+        if (!Array.isArray(lines) || !lines.length) return null;
+        const items = lines.map((line) => {
+          const product = findProductById(line.id);
+          if (!product) return null;
+          return {
+            id: product.id,
+            qty: Math.max(1, Number(line.qty) || 1),
+            name: product.name,
+            zhName: product.zhName || "",
+            price: Number(product.price || 0),
+            image: productImage(product),
+            tags: Array.isArray(product.tags) ? product.tags.slice(0, 6) : [],
+            shape: product.shape || "",
+            style: product.style || "",
+          };
+        }).filter(Boolean);
+        const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+        const discount = subtotal >= 120 ? subtotal * 0.12 : subtotal >= 80 ? 8 : 0;
+        return {
+          mode: "cart",
+          createdAt: new Date().toISOString(),
+          currency: "AUD",
+          items,
+          subtotal,
+          discount,
+          total: Math.max(0, subtotal - discount),
+        };
+      }
+
+      function loadDraft() {
+        const raw = localStorage.getItem(CHECKOUT_DRAFT_KEY);
+        if (raw) {
+          try {
+            state.draft = JSON.parse(raw);
+          } catch {
+            state.draft = null;
+          }
+        }
+        if (!state.draft || !Array.isArray(state.draft.items) || !state.draft.items.length) {
+          state.draft = buildDraftFromCart();
+        }
+      }
+
+      function renderDraft() {
+        const list = document.getElementById("order-list");
+        const draft = state.draft;
+        if (!draft || !Array.isArray(draft.items) || !draft.items.length) {
+          list.innerHTML = `
+            <div class="empty">
+              Your checkout basket is empty. Go back to the product page, add an item, then come here again.
+            </div>
+          `;
+          document.getElementById("subtotal").textContent = money(0);
+          document.getElementById("discount").textContent = `-${money(0)}`;
+          document.getElementById("total").textContent = money(0);
+          document.getElementById("pay-btn").disabled = true;
+          document.getElementById("pay-btn").textContent = "No items selected";
+          return;
+        }
+
+        list.innerHTML = draft.items.map((item) => `
+          <div class="order-line">
+            <span class="thumb" style="${item.image ? `background-image:url('${String(item.image).replace(/'/g, "%27")}')` : ""}"></span>
+            <div>
+              <strong>${item.name || item.id}</strong>
+              <small>${item.id} · Size ${item.size || "M"} x ${item.qty}</small>
+            </div>
+            <b>${money((item.price || 0) * (item.qty || 1))}</b>
+          </div>
+        `).join("");
+
+        document.getElementById("subtotal").textContent = money(draft.subtotal);
+        document.getElementById("discount").textContent = `-${money(draft.discount)}`;
+        document.getElementById("total").textContent = money(draft.total);
+      }
+
+      function collectBuyer() {
+        const form = document.getElementById("checkout-form");
+        return {
+          givenName: form.givenName.value.trim(),
+          familyName: form.familyName.value.trim(),
+          email: form.email.value.trim(),
+          address1: form.address1.value.trim(),
+          city: form.city.value.trim(),
+          state: form.state.value.trim(),
+          postalCode: form.postalCode.value.trim(),
+          phone: form.phone.value.trim(),
+          orderNote: form.orderNote.value.trim(),
+        };
+      }
+
+      async function loadSquareSdk() {
+        if (!state.config?.enabled) {
+          document.getElementById("card-note").textContent = "Demo mode is active. The card area is skipped until Square sandbox keys are added.";
+          setStatus("Square is not configured yet, so this checkout will simulate a successful payment locally.", "");
+          return;
+        }
+        if (!window.isSecureContext) {
+          setStatus("Square card entry needs HTTPS or localhost secure context. Open this page through your Cloudflare HTTPS link or localhost.", "error");
+          document.getElementById("card-note").textContent = "Secure context required for Square Web Payments SDK.";
+          return;
+        }
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = state.config.sdkUrl;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("Failed to load Square Web Payments SDK."));
+          document.head.appendChild(script);
+        });
+        if (!window.Square) throw new Error("Square SDK did not load.");
+        state.payments = window.Square.payments(state.config.applicationId, state.config.locationId);
+        state.card = await state.payments.card();
+        await state.card.attach("#card-container");
+        document.getElementById("card-note").textContent = "Secure card entry is ready. Use Square sandbox test cards once your sandbox keys are configured.";
+        setStatus("Square secure payment form is ready.", "");
+      }
+
+      async function tokenizeCard() {
+        if (!state.card) return "";
+        const result = await state.card.tokenize();
+        if (result.status !== "OK") {
+          const message = (result.errors || []).map((item) => item.message).join(" | ") || "Card tokenization failed.";
+          throw new Error(message);
+        }
+        return result.token;
+      }
+
+      async function submitPayment(event) {
+        event.preventDefault();
+        if (!state.draft?.items?.length) return;
+
+        const button = document.getElementById("pay-btn");
+        button.disabled = true;
+        button.textContent = "Processing...";
+        setStatus("Creating payment...", "");
+
+        try {
+          const sourceId = state.config?.enabled ? await tokenizeCard() : "";
+          const buyer = collectBuyer();
+          const payload = await loadJson("/api/square-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sourceId,
+              amount: state.draft.total,
+              currency: state.draft.currency || "AUD",
+              buyer,
+              note: buyer.orderNote || "AI Nail Studio checkout",
+              items: state.draft.items,
+              idempotencyKey: `checkout_${Date.now()}`,
+            }),
+          });
+
+          localStorage.removeItem(CHECKOUT_DRAFT_KEY);
+          if (state.draft.mode !== "buy-now") localStorage.removeItem(PRODUCT_CART_KEY);
+          setStatus(
+            payload.demo
+              ? `Demo payment completed. Payment id: ${payload.paymentId}`
+              : `Payment completed. Payment id: ${payload.paymentId || "created"}`,
+            "ok"
+          );
+          button.textContent = "Payment completed";
+        } catch (error) {
+          setStatus(error.message || "Payment failed.", "error");
+          button.disabled = false;
+          button.textContent = "Pay now";
+        }
+      }
+
+      async function boot() {
+        try {
+          await Promise.all([loadConfig(), loadCatalog()]);
+          loadDraft();
+          renderDraft();
+          await loadSquareSdk();
+        } catch (error) {
+          setStatus(error.message || "Checkout failed to load.", "error");
+          document.getElementById("card-note").textContent = "Checkout setup did not finish.";
+        }
+      }
+
+      document.getElementById("checkout-form").addEventListener("submit", submitPayment);
+      boot();
+    </script>
+  </body>
+</html>

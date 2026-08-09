@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Admin Account | AI Nail Studio</title>
+    <style>
+      :root {
+        --pink: #df5e93;
+        --pink-soft: #fff0f6;
+        --violet: #8c7cff;
+        --ink: #2d2330;
+        --muted: #756b78;
+        --line: #f1dbe7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 16% 20%, rgba(223, 94, 147, .18), transparent 30%),
+          radial-gradient(circle at 86% 16%, rgba(140, 124, 255, .16), transparent 30%),
+          linear-gradient(135deg, #fff9fc, #f8fbff);
+        color: var(--ink);
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+      }
+
+      .page {
+        width: min(760px, 100%);
+        margin: 0 auto;
+        display: grid;
+        gap: 18px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .back-link {
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 14px;
+        border: 1px solid rgba(223, 94, 147, .24);
+        border-radius: 8px;
+        color: var(--pink);
+        text-decoration: none;
+        font-weight: 900;
+        background: #fff;
+      }
+
+      .card {
+        padding: 28px;
+        border: 1px solid rgba(223, 94, 147, .16);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, .93);
+        box-shadow: 0 26px 80px rgba(88, 47, 91, .14);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--pink);
+        font-size: .76rem;
+        font-weight: 900;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.8rem, 5vw, 2.6rem);
+        line-height: 1.06;
+      }
+
+      .hint {
+        margin: 10px 0 22px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      label {
+        display: grid;
+        gap: 7px;
+        color: var(--muted);
+        font-size: .84rem;
+        font-weight: 850;
+      }
+
+      .wide {
+        grid-column: 1 / -1;
+      }
+
+      input,
+      select {
+        width: 100%;
+        min-height: 46px;
+        padding: 0 13px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        color: var(--ink);
+        font: inherit;
+        font-weight: 760;
+        outline: none;
+        background: #fff;
+      }
+
+      input:focus,
+      select:focus {
+        border-color: rgba(223, 94, 147, .72);
+        box-shadow: 0 0 0 4px rgba(223, 94, 147, .12);
+      }
+
+      .actions {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 4px;
+      }
+
+      button {
+        min-height: 46px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 9px;
+        color: #fff;
+        font: inherit;
+        font-weight: 950;
+        cursor: pointer;
+        background: linear-gradient(135deg, var(--pink), var(--violet));
+        box-shadow: 0 14px 34px rgba(223, 94, 147, .22);
+      }
+
+      button.secondary {
+        color: var(--pink);
+        border: 1px solid rgba(223, 94, 147, .22);
+        background: #fff;
+        box-shadow: none;
+      }
+
+      button:disabled {
+        opacity: .64;
+        cursor: wait;
+      }
+
+      .status {
+        grid-column: 1 / -1;
+        min-height: 20px;
+        margin: 0;
+        color: var(--muted);
+        font-size: .86rem;
+        font-weight: 760;
+      }
+
+      .status.error {
+        color: #c51f4a;
+      }
+
+      .status.ok {
+        color: #267a5a;
+      }
+
+      @media (max-width: 680px) {
+        body {
+          padding: 16px;
+        }
+
+        form {
+          grid-template-columns: 1fr;
+        }
+
+        .actions {
+          justify-content: stretch;
+          flex-direction: column-reverse;
+        }
+
+        .actions button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="topbar">
+        <a class="back-link" href="/admin.html">Back to Admin</a>
+      </div>
+
+      <section class="card">
+        <p class="eyebrow">Administrator Access</p>
+        <h1>Create Admin Account</h1>
+        <p class="hint">Create a new B-side administrator account. Only logged-in administrators can use this page.</p>
+
+        <form id="create-admin-form">
+          <label>
+            Admin ID
+            <input name="adminId" required autocomplete="off" placeholder="manager_01" />
+          </label>
+          <label>
+            Display name
+            <input name="displayName" autocomplete="off" placeholder="Store Manager" />
+          </label>
+          <label>
+            Role
+            <select name="role">
+              <option value="admin">Admin</option>
+              <option value="operator">Operator</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select name="status">
+              <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" required minlength="6" autocomplete="new-password" />
+          </label>
+          <label>
+            Confirm password
+            <input name="confirmPassword" type="password" required minlength="6" autocomplete="new-password" />
+          </label>
+
+          <p class="status" id="create-status">Password must be at least 6 characters.</p>
+          <div class="actions">
+            <button class="secondary" type="reset">Clear</button>
+            <button type="submit">Create Account</button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const form = document.querySelector("#create-admin-form");
+      const statusNode = document.querySelector("#create-status");
+      const submitButton = form.querySelector("[type='submit']");
+
+      function setStatus(message, type = "") {
+        statusNode.textContent = message;
+        statusNode.className = `status ${type}`;
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        if (data.password !== data.confirmPassword) {
+          setStatus("Passwords do not match.", "error");
+          return;
+        }
+        submitButton.disabled = true;
+        submitButton.textContent = "Creating...";
+        setStatus("Creating administrator account...");
+        try {
+          const response = await fetch("/api/admin/create-account", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          const result = await response.json();
+          if (!response.ok || !result.ok) throw new Error(result.error || "Create failed.");
+          setStatus(`Created: ${result.admin.adminId} (${result.admin.role})`, "ok");
+          form.reset();
+        } catch (error) {
+          setStatus(error.message || "Create failed.", "error");
+        } finally {
+          submitButton.disabled = false;
+          submitButton.textContent = "Create Account";
+        }
+      });
+    </script>
+  </body>
+</html>
