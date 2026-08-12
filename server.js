@@ -457,6 +457,11 @@ async function handleAdminOfficialTemplate(req, res) {
     return;
   }
   try {
+    if (hasPostgresRuntime()) {
+      const result = await savePgTemplateUpload(body, "official");
+      sendJson(res, result.ok === false ? 400 : 200, result);
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "admin_template_insert.py"), body);
     sendJson(res, 200, result);
   } catch (error) {
@@ -475,10 +480,120 @@ async function handleCommunityTemplate(req, res) {
     return;
   }
   try {
+    if (hasPostgresRuntime()) {
+      const result = await savePgTemplateUpload(body, "community");
+      sendJson(res, result.ok === false ? 400 : 200, result);
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "community_template_insert.py"), body);
     sendJson(res, 200, result);
   } catch (error) {
     sendJson(res, 500, { error: error.message || "Failed to save community template." });
+  }
+}
+
+function parseDataUrlImage(dataUrl) {
+  const text = String(dataUrl || "");
+  const match = text.match(/^data:([^;,]+);base64,(.+)$/);
+  if (!match) return { mimeType: "", base64: "" };
+  return { mimeType: match[1], base64: match[2] };
+}
+
+async function savePgTemplateUpload(body, sourceType) {
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    const templateId = body.templateId || `${sourceType}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    const images = Array.isArray(body.images) && body.images.length
+      ? body.images
+      : [{ data: body.image, width: body.width, height: body.height }].filter((item) => item.data);
+    const assetIds = [];
+    for (const image of images) {
+      const { mimeType, base64 } = parseDataUrlImage(image.data || image.image || image);
+      const assetId = `asset_${crypto.randomUUID().replace(/-/g, "")}`;
+      await client.query(
+        `
+        INSERT INTO assets (asset_id, owner_user_id, asset_type, mime_type, url, base64_data, width, height)
+        VALUES ($1, $2, 'template-image', $3, $4, $5, $6, $7)
+        `,
+        [
+          assetId,
+          body.userId || null,
+          mimeType || "image/png",
+          body.imageUrl || "",
+          base64 || "",
+          Number(image.width || body.width || 0) || null,
+          Number(image.height || body.height || 0) || null,
+        ],
+      );
+      assetIds.push(assetId);
+    }
+    const coverAssetId = assetIds[0] || null;
+    await client.query(
+      `
+      INSERT INTO templates (
+        template_id, author_user_id, source_type, template_name, template_title, description,
+        template_type, design_type, nail_shape, material_type, shape_categories,
+        style_categories, material_categories, topic_tags, tags, cover_asset_id,
+        image_asset_id, image_asset_ids, author_display_name, visibility, status, published_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, 'nail', $7, $8, $9, $10, $11, $12, $13, $14, $15, $15, $16, $17, 'public', 'active', CURRENT_TIMESTAMP)
+      ON CONFLICT (template_id) DO UPDATE SET
+        template_name=EXCLUDED.template_name,
+        template_title=EXCLUDED.template_title,
+        description=EXCLUDED.description,
+        design_type=EXCLUDED.design_type,
+        nail_shape=EXCLUDED.nail_shape,
+        material_type=EXCLUDED.material_type,
+        cover_asset_id=EXCLUDED.cover_asset_id,
+        image_asset_id=EXCLUDED.image_asset_id,
+        image_asset_ids=EXCLUDED.image_asset_ids,
+        updated_at=CURRENT_TIMESTAMP
+      `,
+      [
+        templateId,
+        body.userId || null,
+        sourceType,
+        body.templateName || body.template_name || body.name || templateId,
+        body.templateTitle || body.template_title || body.templateName || body.name || templateId,
+        body.description || "",
+        body.designType || body.design_type || "nail",
+        body.nailShape || body.nail_shape || "",
+        body.materialType || body.material_type || "",
+        body.shapeCategories || body.shape_categories || body.nailShape || "",
+        body.styleCategories || body.style_categories || "",
+        body.materialCategories || body.material_categories || body.materialType || "",
+        body.topicTags || body.topic_tags || "",
+        body.tags || "",
+        coverAssetId,
+        JSON.stringify(assetIds),
+        body.authorDisplayName || body.author_display_name || "Community Creator",
+      ],
+    );
+    const galleryId = sourceType === "official" ? "official_factory" : "community_gallery";
+    const galleryType = sourceType;
+    const galleryTemplateId = `gt_${crypto.randomUUID().replace(/-/g, "")}`;
+    await client.query(
+      `
+      INSERT INTO gallery_templates (gallery_template_id, gallery_type, gallery_id, template_id, user_id)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (gallery_type, gallery_id, template_id) DO NOTHING
+      `,
+      [galleryTemplateId, galleryType, galleryId, templateId, body.userId || null],
+    );
+    await client.query("COMMIT");
+    return {
+      ok: true,
+      templateId,
+      imageAssetIds: assetIds,
+      imageUrl: body.imageUrl || "",
+      imageUrls: body.imageUrl ? [body.imageUrl] : [],
+    };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    return { ok: false, error: error.message || "Failed to save template." };
+  } finally {
+    client.release();
   }
 }
 
@@ -787,6 +902,578 @@ async function handlePgUserLogout(body) {
   return { ok: true };
 }
 
+async function getPgAuthSession(sessionId) {
+  const row = (await pgPool.query(
+    `
+    SELECT s.session_id, u.*
+    FROM user_auth_sessions s
+    JOIN users u ON u.user_id = s.user_id
+    WHERE s.session_id=$1 AND s.status='active' AND u.auth_status='active'
+    `,
+    [String(sessionId || "")],
+  )).rows[0];
+  if (!row) return { ok: false, error: "Session expired." };
+  await pgPool.query("UPDATE user_auth_sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE session_id=$1", [row.session_id]);
+  await pgPool.query("UPDATE users SET last_seen_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE user_id=$1", [row.user_id]);
+  return { ok: true, user: publicPgUser(row), sessionId: row.session_id, row };
+}
+
+async function handlePgUserProfile(body) {
+  const session = await getPgAuthSession(body.sessionId);
+  if (!session.ok) return session;
+  const accounts = await safePgRows(
+    `
+    SELECT platform, platform_user_id AS "platformUserId", username, access_status AS status, linked_at AS "linkedAt"
+    FROM third_party_accounts
+    WHERE user_id=$1
+    ORDER BY linked_at DESC
+    `,
+    [session.user.userId],
+  );
+  return {
+    ok: true,
+    user: {
+      ...session.user,
+      createdAt: session.row.created_at,
+      lastSeenAt: session.row.last_seen_at,
+      thirdPartyAccounts: accounts,
+    },
+    sessionId: session.sessionId,
+  };
+}
+
+async function handlePgUserPromos(body) {
+  let userId = String(body.userId || "").trim();
+  if (!userId && body.sessionId) {
+    const session = await getPgAuthSession(body.sessionId);
+    if (!session.ok) return session;
+    userId = session.user.userId;
+  }
+  if (!userId) return { ok: false, error: "User is required." };
+  const promos = await safePgRows(
+    `
+    SELECT
+      up.user_promo_id,
+      up.status AS user_status,
+      up.assigned_at,
+      up.used_at,
+      p.promo_id,
+      p.promo_title,
+      p.promo_type,
+      p.promo_content,
+      p.expire_date,
+      p.status
+    FROM user_promo up
+    JOIN promotion p ON p.promo_id = up.promo_id
+    WHERE up.user_id=$1
+    ORDER BY up.assigned_at DESC
+    `,
+    [userId],
+  );
+  return { ok: true, promos };
+}
+
+function formatPgAddress(row) {
+  if (!row) return "";
+  return [row.receiver_name, row.phone, row.street, row.city, row.state, row.postcode, row.country]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" / ");
+}
+
+async function handlePgUserShippingAddress(body) {
+  const session = await getPgAuthSession(body.sessionId);
+  if (!session.ok) return session;
+  if (body.mode === "save") {
+    const addressText = String(body.address || "").trim();
+    if (addressText.length < 6) return { ok: false, error: "Shipping address is too short." };
+    const existing = (await pgPool.query(
+      "SELECT address_id FROM addresses WHERE user_id=$1 ORDER BY is_default DESC, created_at DESC LIMIT 1",
+      [session.user.userId],
+    )).rows[0];
+    let addressId = existing?.address_id;
+    if (addressId) {
+      await pgPool.query(
+        "UPDATE addresses SET street=$1, is_default=1 WHERE address_id=$2 AND user_id=$3",
+        [addressText, addressId, session.user.userId],
+      );
+    } else {
+      addressId = `addr_${crypto.randomUUID().replace(/-/g, "")}`;
+      await pgPool.query(
+        "INSERT INTO addresses (address_id, user_id, street, country, is_default) VALUES ($1, $2, $3, 'Australia', 1)",
+        [addressId, session.user.userId, addressText],
+      );
+    }
+    await pgPool.query("UPDATE users SET default_address_id=$1, updated_at=CURRENT_TIMESTAMP WHERE user_id=$2", [addressId, session.user.userId]);
+  }
+  const row = (await pgPool.query(
+    "SELECT * FROM addresses WHERE user_id=$1 ORDER BY is_default DESC, created_at DESC LIMIT 1",
+    [session.user.userId],
+  )).rows[0];
+  return { ok: true, address: formatPgAddress(row), addressId: row?.address_id || "" };
+}
+
+async function handlePgUserAction(body) {
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    const user = await pgEnsureUser(client, body.userId, body.recoveryCode);
+    const targetType = String(body.targetType || "").trim().toLowerCase();
+    const targetId = String(body.targetId || "").trim();
+    const actionType = String(body.actionType || "").trim().toLowerCase();
+    if (!targetId) return { ok: false, error: "Target ID is required." };
+    const actionId = `action_${crypto.randomUUID().replace(/-/g, "")}`;
+    const action = (await client.query(
+      `
+      INSERT INTO user_actions (action_id, user_id, target_type, target_id, action_type)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (user_id, target_type, target_id, action_type) DO UPDATE SET created_at=user_actions.created_at
+      RETURNING action_id, user_id, target_type, target_id, action_type, created_at
+      `,
+      [actionId, user.userId, targetType, targetId, actionType],
+    )).rows[0];
+    if (targetType === "template" && actionType === "like") {
+      await client.query("UPDATE templates SET like_count=COALESCE(like_count, 0)+1, updated_at=CURRENT_TIMESTAMP WHERE template_id=$1", [targetId]);
+    }
+    if (targetType === "comment" && actionType === "like") {
+      await client.query("UPDATE comments SET like_count=COALESCE(like_count, 0)+1 WHERE comment_id=$1", [targetId]);
+    }
+    await client.query("COMMIT");
+    return { ok: true, user, action };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    return { ok: false, error: error.message || "Failed to record user action." };
+  } finally {
+    client.release();
+  }
+}
+
+function draftPrimaryId(userId, draftId) {
+  const cleanDraftId = String(draftId || "AUTO-DRAFT-D2-CANVAS").trim() || "AUTO-DRAFT-D2-CANVAS";
+  return `${userId}:${cleanDraftId}`;
+}
+
+async function handlePgUserDraft(req, url) {
+  if (req.method === "GET") {
+    const client = await pgPool.connect();
+    try {
+      await client.query("BEGIN");
+      const user = await pgEnsureUser(client, url.searchParams.get("userId") || "", url.searchParams.get("recoveryCode") || "");
+      const requestedId = url.searchParams.get("draftId") || "";
+      const row = requestedId
+        ? (await client.query("SELECT * FROM draft_cache WHERE draft_id=$1", [draftPrimaryId(user.userId, requestedId)])).rows[0]
+        : (await client.query(
+          "SELECT * FROM draft_cache WHERE user_id=$1 AND draft_type='design_canvas' AND is_auto_draft=1 ORDER BY saved_at DESC LIMIT 1",
+          [user.userId],
+        )).rows[0];
+      await client.query("COMMIT");
+      return {
+        ok: true,
+        user,
+        draft: row ? {
+          draftId: row.draft_id,
+          draftType: row.draft_type,
+          savedAt: row.saved_at,
+          isAutoDraft: Boolean(row.is_auto_draft),
+          content: JSON.parse(row.draft_content_json || "{}"),
+        } : null,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  const body = await readJson(req);
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    const user = await pgEnsureUser(client, body.userId, body.recoveryCode);
+    if (!body.content || typeof body.content !== "object") return { ok: false, error: "Draft content must be an object." };
+    const draftId = draftPrimaryId(user.userId, body.draftId);
+    const row = (await client.query(
+      `
+      INSERT INTO draft_cache (draft_id, user_id, draft_type, draft_content_json, preview_asset_id, saved_at, is_auto_draft)
+      VALUES ($1, $2, $3, $4, NULL, CURRENT_TIMESTAMP, $5)
+      ON CONFLICT (draft_id) DO UPDATE SET
+        draft_content_json=EXCLUDED.draft_content_json,
+        saved_at=CURRENT_TIMESTAMP,
+        is_auto_draft=EXCLUDED.is_auto_draft
+      RETURNING saved_at
+      `,
+      [
+        draftId,
+        user.userId,
+        String(body.draftType || "design_canvas"),
+        JSON.stringify(body.content),
+        body.isAutoDraft ? 1 : 0,
+      ],
+    )).rows[0];
+    await client.query("COMMIT");
+    return { ok: true, user, draftId, savedAt: row?.saved_at || null };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function pgTemplateAuthor(templateId) {
+  const row = (await pgPool.query(
+    `
+    SELECT
+      t.template_id,
+      t.author_user_id,
+      t.author_display_name,
+      t.author_level,
+      t.source_type,
+      t.like_count,
+      t.comment_count,
+      u.username,
+      u.user_kind,
+      u.created_at AS user_created_at,
+      m.tier,
+      m.level
+    FROM templates t
+    LEFT JOIN users u ON u.user_id = t.author_user_id
+    LEFT JOIN members m ON m.user_id = t.author_user_id
+    WHERE t.template_id=$1
+    `,
+    [templateId],
+  )).rows[0];
+  if (!row) return null;
+  const name = row.username || row.author_display_name || "";
+  if (!name) return null;
+  const levelParts = [row.author_level, row.tier, row.level ? `Lv.${row.level}` : ""].filter(Boolean);
+  return {
+    userId: row.author_user_id || "",
+    name,
+    avatarText: name.slice(0, 2).toUpperCase(),
+    meta: [row.author_user_id, ...levelParts].filter(Boolean).join(" / "),
+    sourceType: row.source_type,
+    likeCount: row.like_count || 0,
+    commentCount: row.comment_count || 0,
+  };
+}
+
+async function pgTemplateComments(templateId) {
+  const rows = await safePgRows(
+    `
+    SELECT
+      c.comment_id,
+      c.parent_comment_id,
+      c.user_id,
+      c.content,
+      c.like_count,
+      c.created_at,
+      u.username
+    FROM comments c
+    LEFT JOIN users u ON u.user_id = c.user_id
+    WHERE c.target_type='template'
+      AND c.target_id=$1
+      AND c.status='published'
+    ORDER BY c.created_at ASC
+    `,
+    [templateId],
+  );
+  const comments = [];
+  const byId = new Map();
+  for (const row of rows) {
+    const item = {
+      id: row.comment_id,
+      parentId: row.parent_comment_id || "",
+      user: row.username || row.user_id || "User",
+      userId: row.user_id,
+      text: row.content,
+      likes: row.like_count || 0,
+      createdAt: row.created_at,
+      replies: [],
+    };
+    byId.set(item.id, item);
+    if (item.parentId && byId.has(item.parentId)) byId.get(item.parentId).replies.push(item);
+    else comments.push(item);
+  }
+  return comments;
+}
+
+function countNestedComments(comments) {
+  return comments.reduce((total, comment) => total + 1 + countNestedComments(comment.replies || []), 0);
+}
+
+async function handlePgTemplateSocial(req, url) {
+  const payload = req.method === "GET"
+    ? { action: "detail", templateId: url.searchParams.get("templateId") || "" }
+    : await readJson(req);
+  const action = String(payload.action || "detail");
+  const templateId = String(payload.templateId || "").trim();
+  if (!templateId && action !== "like_comment") return { ok: false, error: "templateId is required." };
+
+  if (action === "detail") {
+    const author = await pgTemplateAuthor(templateId);
+    const comments = await pgTemplateComments(templateId);
+    const counts = (await pgPool.query("SELECT like_count, comment_count FROM templates WHERE template_id=$1", [templateId])).rows[0] || {};
+    return {
+      ok: true,
+      templateId,
+      author,
+      comments,
+      counts: {
+        comments: countNestedComments(comments),
+        likes: counts.like_count || 0,
+      },
+    };
+  }
+
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    const user = await pgEnsureUser(client, payload.userId, payload.recoveryCode);
+    if (action === "like_template") {
+      const count = (await client.query(
+        "UPDATE templates SET like_count=COALESCE(like_count, 0)+1, updated_at=CURRENT_TIMESTAMP WHERE template_id=$1 RETURNING like_count",
+        [templateId],
+      )).rows[0];
+      await client.query(
+        `
+        INSERT INTO user_actions (action_id, user_id, target_type, target_id, action_type)
+        VALUES ($1, $2, 'template', $3, 'like')
+        ON CONFLICT (user_id, target_type, target_id, action_type) DO NOTHING
+        `,
+        [`action_${crypto.randomUUID().replace(/-/g, "")}`, user.userId, templateId],
+      );
+      await client.query("COMMIT");
+      return { ok: true, user, likeCount: count?.like_count || 0 };
+    }
+    if (action === "add_comment") {
+      const content = String(payload.content || "").trim();
+      const parentId = String(payload.parentCommentId || "").trim();
+      if (!content) return { ok: false, error: "Comment content is required." };
+      const commentId = `comment_${crypto.randomUUID().replace(/-/g, "")}`;
+      await client.query(
+        `
+        INSERT INTO comments (comment_id, target_type, target_id, parent_comment_id, user_id, content)
+        VALUES ($1, 'template', $2, $3, $4, $5)
+        `,
+        [commentId, templateId, parentId || null, user.userId, content],
+      );
+      await client.query(
+        `
+        INSERT INTO user_comments (post_id, comment_type, user_id, comment_content)
+        VALUES ($1, $2, $3, $4)
+        `,
+        [templateId, parentId ? "secondary" : "primary", user.userId, content],
+      );
+      const commentCount = (await client.query(
+        `
+        UPDATE templates
+        SET comment_count=(
+          SELECT COUNT(*) FROM comments WHERE target_type='template' AND target_id=$1 AND status='published'
+        ), updated_at=CURRENT_TIMESTAMP
+        WHERE template_id=$1
+        RETURNING comment_count
+        `,
+        [templateId],
+      )).rows[0]?.comment_count || 0;
+      await client.query(
+        `
+        INSERT INTO user_actions (action_id, user_id, target_type, target_id, action_type)
+        VALUES ($1, $2, 'template', $3, $4)
+        ON CONFLICT (user_id, target_type, target_id, action_type) DO NOTHING
+        `,
+        [`action_${crypto.randomUUID().replace(/-/g, "")}`, user.userId, templateId, parentId ? "reply" : "comment"],
+      );
+      await client.query("COMMIT");
+      return { ok: true, user, commentId, commentCount, comments: await pgTemplateComments(templateId) };
+    }
+    if (action === "like_comment") {
+      const commentId = String(payload.commentId || "").trim();
+      const row = (await client.query(
+        "UPDATE comments SET like_count=COALESCE(like_count, 0)+1 WHERE comment_id=$1 RETURNING target_id, like_count",
+        [commentId],
+      )).rows[0];
+      await client.query(
+        `
+        INSERT INTO user_actions (action_id, user_id, target_type, target_id, action_type)
+        VALUES ($1, $2, 'comment', $3, 'like')
+        ON CONFLICT (user_id, target_type, target_id, action_type) DO NOTHING
+        `,
+        [`action_${crypto.randomUUID().replace(/-/g, "")}`, user.userId, commentId],
+      );
+      await client.query("COMMIT");
+      return { ok: true, user, templateId: row?.target_id || "", likeCount: row?.like_count || 0 };
+    }
+    await client.query("ROLLBACK");
+    return { ok: false, error: `Unsupported action: ${action}` };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    return { ok: false, error: error.message || "Failed to update template social data." };
+  } finally {
+    client.release();
+  }
+}
+
+function adminModel(title, idKey, rows, extra = {}) {
+  return {
+    title,
+    editable: extra.editable !== false,
+    idKey,
+    filters: extra.filters || [],
+    columns: extra.columns || (rows[0] ? Object.keys(rows[0]).slice(0, 12) : [idKey]),
+    fields: extra.fields || [],
+    rows,
+    ...(extra.kindKey ? { kindKey: extra.kindKey } : {}),
+  };
+}
+
+async function handlePgAdminModels() {
+  const [
+    taxonomy,
+    templates,
+    products,
+    events,
+    users,
+    orders,
+    userActions,
+  ] = await Promise.all([
+    loadPgTaxonomy(),
+    loadPgTemplates(),
+    loadPgProducts(),
+    loadPgEvents(),
+    safePgRows("SELECT user_id, username, user_kind, recovery_code, email, phone, gender, created_at, last_seen_at FROM users ORDER BY created_at DESC"),
+    safePgRows(`
+      SELECT o.order_id, o.user_id, u.username, o.total_price, o.pay_method, o.payment_status,
+             o.delivery_status, o.order_status, o.created_at, o.paid_at
+      FROM orders o
+      LEFT JOIN users u ON u.user_id = o.user_id
+      ORDER BY o.created_at DESC
+    `),
+    safePgRows(`
+      SELECT ua.action_id, ua.user_id, u.username, ua.target_type, ua.target_id, ua.action_type, ua.created_at
+      FROM user_actions ua
+      LEFT JOIN users u ON u.user_id = ua.user_id
+      ORDER BY ua.created_at DESC
+    `),
+  ]);
+  const officialRows = templates.filter((item) => item.source_type === "official").map((item) => ({
+    id: item.template_id,
+    template_id: item.template_id,
+    template_name: item.template_name,
+    template_title: item.template_title,
+    design_type: item.design_type,
+    nail_shape: item.nail_shape,
+    material_type: item.material_type,
+    status: "active",
+    image: item.image_url,
+    image_url: item.image_url,
+    image_preview_url: item.image_url,
+    like_count: item.like_count,
+    comment_count: item.comment_count,
+    published_at: item.published_at,
+  }));
+  const communityRows = templates.filter((item) => item.source_type === "community").map((item) => ({
+    id: item.template_id,
+    template_id: item.template_id,
+    template_name: item.template_name,
+    template_title: item.template_title,
+    design_type: item.design_type,
+    nail_shape: item.nail_shape,
+    material_type: item.material_type,
+    author_display_name: item.author_display_name,
+    status: "active",
+    image: item.image_url,
+    image_url: item.image_url,
+    image_preview_url: item.image_url,
+    like_count: item.like_count,
+    comment_count: item.comment_count,
+    published_at: item.published_at,
+  }));
+  const productRows = products.map((item) => ({
+    item_kind: "product",
+    id: item.product_id,
+    name: item.product_name,
+    type: item.product_type,
+    image: item.image_url,
+    image_url: item.image_url,
+    image_preview_url: item.image_url,
+    info: item.product_info,
+    nail_shape: item.nail_shape,
+    style_tags: item.style_tags,
+    price_or_points: item.unit_price,
+    stock_quantity: item.stock_quantity,
+    stock_s: item.stock_s,
+    stock_m: item.stock_m,
+    stock_l: item.stock_l,
+    stock_xl: item.stock_xl,
+    stock_by_size: `S:${item.stock_s || 0} / M:${item.stock_m || 0} / L:${item.stock_l || 0} / XL:${item.stock_xl || 0}`,
+    pickup_method: item.pickup_method,
+    is_featured: item.is_featured,
+    status: item.status,
+  }));
+  return {
+    ok: true,
+    models: {
+      product: adminModel("Official Product / Reward Library", "id", productRows, {
+        kindKey: "item_kind",
+        columns: ["item_kind", "id", "name", "type", "nail_shape", "price_or_points", "stock_by_size", "pickup_method", "is_featured", "status"],
+      }),
+      official: adminModel("Official Factory Gallery", "template_id", officialRows, {
+        columns: ["template_id", "template_name", "design_type", "nail_shape", "material_type", "like_count", "comment_count", "published_at"],
+      }),
+      community: adminModel("Community Template Library", "template_id", communityRows, {
+        columns: ["template_id", "template_name", "author_display_name", "design_type", "nail_shape", "material_type", "like_count", "comment_count", "published_at"],
+      }),
+      users: adminModel("User Management", "user_id", users, {
+        columns: ["user_id", "username", "user_kind", "email", "phone", "gender", "created_at", "last_seen_at"],
+      }),
+      event: adminModel("Events", "event_id", events, {
+        columns: ["event_id", "event_name", "event_type", "html_url", "start_at", "expires_at", "status"],
+      }),
+      orders: adminModel("Orders", "order_id", orders, { editable: false }),
+      "user-actions": adminModel("User Actions", "action_id", userActions, { editable: false }),
+      taxonomy: {
+        title: "Taxonomy",
+        editable: true,
+        idKey: "id",
+        rows: [
+          ...taxonomy.styles.map((item) => ({ ...item, taxonomy_type: "style" })),
+          ...taxonomy.shapes.map((item) => ({ ...item, taxonomy_type: "shape" })),
+          ...taxonomy.materials.map((item) => ({ ...item, taxonomy_type: "material" })),
+          ...taxonomy.topics.map((item) => ({ ...item, taxonomy_type: "topic" })),
+        ],
+        columns: ["taxonomy_type", "id", "name", "status"],
+        filters: [],
+        fields: [],
+      },
+    },
+  };
+}
+
+async function handlePgAdminProductImage(url) {
+  const itemKind = url.searchParams.get("itemKind") || "product";
+  const id = url.searchParams.get("id") || "";
+  let row = null;
+  if (itemKind === "template") {
+    row = (await pgPool.query(
+      `
+      SELECT COALESCE(a.url, '') AS image_url, a.base64_data
+      FROM templates t
+      LEFT JOIN assets a ON a.asset_id = COALESCE(t.cover_asset_id, t.image_asset_id)
+      WHERE t.template_id=$1
+      `,
+      [id],
+    )).rows[0];
+  } else if (itemKind === "asset") {
+    row = (await pgPool.query("SELECT url AS image_url, base64_data FROM assets WHERE asset_id=$1", [id])).rows[0];
+  } else if (itemKind === "promo") {
+    row = (await pgPool.query("SELECT image_url, image_base64 AS base64_data FROM promotional_assets WHERE promo_asset_id=$1", [id])).rows[0];
+  } else {
+    row = (await pgPool.query("SELECT image_url, image_base64 AS base64_data FROM products WHERE product_id=$1", [id])).rows[0];
+  }
+  return { ok: Boolean(row?.image_url || row?.base64_data), image_url: row?.image_url || "", image_base64: row?.base64_data || "" };
+}
+
 async function handleUserSession(req, res) {
   const body = await readJson(req);
   try {
@@ -930,6 +1617,11 @@ async function handleUserAuthSession(req, res) {
 async function handleUserProfile(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserProfile(body);
+      sendJson(res, result.ok === false ? 401 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "profile",
       sessionId: body.sessionId,
@@ -943,6 +1635,11 @@ async function handleUserProfile(req, res) {
 async function handleUserPromos(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserPromos(body);
+      sendJson(res, result.ok === false ? 400 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "promotion_admin.py"), {
       action: "public_user_promos",
       sessionId: body.sessionId,
@@ -977,6 +1674,11 @@ async function handleUserShippingAddress(req, res) {
   const body = await readJson(req);
   const mode = body.mode === "save" ? "save_shipping_address" : "get_shipping_address";
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserShippingAddress(body);
+      sendJson(res, result.ok === false ? 401 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: mode,
       sessionId: body.sessionId,
@@ -991,6 +1693,11 @@ async function handleUserShippingAddress(req, res) {
 async function handleUserAction(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserAction(body);
+      sendJson(res, result.ok === false ? 400 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "record_action",
       userId: body.userId,
@@ -1007,6 +1714,11 @@ async function handleUserAction(req, res) {
 
 async function handleTemplateSocial(req, res, url) {
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgTemplateSocial(req, url);
+      sendJson(res, result.ok === false ? 400 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const body = req.method === "GET"
       ? {
           action: "detail",
@@ -1022,6 +1734,11 @@ async function handleTemplateSocial(req, res, url) {
 
 async function handleUserDraft(req, res, url) {
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserDraft(req, url);
+      sendJson(res, result.ok === false ? 400 : 200, result);
+      return;
+    }
     if (req.method === "GET") {
       const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
         action: "load_draft",
@@ -1149,6 +1866,11 @@ async function handleAdminTaxonomy(req, res) {
 
 async function handleAdminModels(req, res) {
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgAdminModels();
+      sendJson(res, 200, result);
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "admin_models.py"), {});
     sendJson(res, 200, result);
   } catch (error) {
@@ -1158,10 +1880,12 @@ async function handleAdminModels(req, res) {
 
 async function handleAdminProductImage(req, res, url) {
   try {
-    const result = await runPythonJsonScript(path.join(root, "database", "admin_media.py"), {
-      itemKind: url.searchParams.get("itemKind") || "product",
-      id: url.searchParams.get("id") || "",
-    });
+    const result = hasPostgresRuntime()
+      ? await handlePgAdminProductImage(url)
+      : await runPythonJsonScript(path.join(root, "database", "admin_media.py"), {
+        itemKind: url.searchParams.get("itemKind") || "product",
+        id: url.searchParams.get("id") || "",
+      });
     if (!result.ok) {
       sendJson(res, 404, { error: result.error || "Image not found." });
       return;
