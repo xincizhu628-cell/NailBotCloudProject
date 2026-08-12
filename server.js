@@ -3,6 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const os = require("os");
+const crypto = require("crypto");
+const { Pool } = require("pg");
 const { createSquarePaymentService } = require("./services/squarePaymentService");
 
 const root = path.resolve(__dirname || process.cwd());
@@ -11,6 +13,10 @@ const bundledPython = path.join(os.homedir(), ".cache", "codex-runtimes", "codex
 
 const port = Number(process.env.PORT || 4174);
 const squarePaymentService = createSquarePaymentService({ env: process.env });
+const pgPool = process.env.DATABASE_URL ? new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: String(process.env.DATABASE_SSL || "true").toLowerCase() === "false" ? false : { rejectUnauthorized: false },
+}) : null;
 const defaultModel = process.env.HF_IMAGE_MODEL || "black-forest-labs/FLUX.1-schnell";
 const defaultArkModel = process.env.ARK_IMAGE_MODEL || "seedream-4-5-251128";
 const defaultArkEndpoint = process.env.ARK_IMAGE_ENDPOINT || "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations";
@@ -476,9 +482,319 @@ async function handleCommunityTemplate(req, res) {
   }
 }
 
+function hasPostgresRuntime() {
+  return Boolean(pgPool);
+}
+
+function makeGuestId() {
+  return `guest_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+function makeRecoveryCode() {
+  return `NB-${crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}-${crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+}
+
+function makeUserId() {
+  return `user_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+function publicPgUser(row) {
+  if (!row) return null;
+  return {
+    userId: row.user_id,
+    username: row.username,
+    userKind: row.user_kind || "guest",
+    recoveryCode: row.recovery_code || "",
+    email: row.email || null,
+    phone: row.phone || null,
+    avatarText: String(row.username || "U").slice(0, 1).toUpperCase(),
+  };
+}
+
+function verifyPgPassword(password, passwordHash, salt) {
+  if (!passwordHash || !salt) return false;
+  const digest = crypto.pbkdf2Sync(String(password || ""), String(salt), 120000, 32, "sha256").toString("hex");
+  const stored = String(passwordHash);
+  if (stored.length !== digest.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(stored));
+}
+
+function hashPgPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const digest = crypto.pbkdf2Sync(String(password || ""), salt, 120000, 32, "sha256").toString("hex");
+  return { passwordHash: digest, passwordSalt: salt };
+}
+
+function normalizeContact(targetType, targetValue) {
+  let type = String(targetType || "").trim().toLowerCase();
+  let value = String(targetValue || "").trim();
+  if (!type) type = value.includes("@") ? "email" : "phone";
+  if (type === "email") {
+    value = value.toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) throw new Error("Invalid email address.");
+  } else {
+    type = "phone";
+    value = value.replace(/[\s\-()]/g, "");
+    if (!/^\+?\d{6,18}$/.test(value)) throw new Error("Invalid phone number.");
+  }
+  return { type, value };
+}
+
+function makeVerificationCode() {
+  return String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+}
+
+async function pgEnsureMember(client, userId) {
+  await client.query(
+    `
+    INSERT INTO members (member_id, user_id, tier, level, points_balance)
+    VALUES ($1, $2, 'Aurora Member', 1, 0)
+    ON CONFLICT (user_id) DO NOTHING
+    `,
+    [`member_${userId}`, userId],
+  );
+}
+
+async function pgEnsureUser(client, userId, recoveryCode) {
+  let user = null;
+  if (userId) {
+    user = (await client.query("SELECT * FROM users WHERE user_id=$1", [userId])).rows[0] || null;
+  }
+  if (!user && recoveryCode) {
+    user = (await client.query("SELECT * FROM users WHERE recovery_code=$1", [recoveryCode])).rows[0] || null;
+  }
+  if (user) {
+    await client.query("UPDATE users SET last_seen_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE user_id=$1", [user.user_id]);
+    await pgEnsureMember(client, user.user_id);
+    return publicPgUser(user);
+  }
+  const newUserId = userId || makeGuestId();
+  const newRecoveryCode = recoveryCode || makeRecoveryCode();
+  const username = `Guest ${newUserId.slice(-6)}`;
+  user = (await client.query(
+    `
+    INSERT INTO users (user_id, username, user_kind, recovery_code, last_seen_at)
+    VALUES ($1, $2, 'guest', $3, CURRENT_TIMESTAMP)
+    ON CONFLICT (user_id) DO UPDATE SET last_seen_at=CURRENT_TIMESTAMP
+    RETURNING *
+    `,
+    [newUserId, username, newRecoveryCode],
+  )).rows[0];
+  await pgEnsureMember(client, user.user_id);
+  return publicPgUser(user);
+}
+
+async function handlePgUserSession(body) {
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    const user = await pgEnsureUser(client, body.userId, body.recoveryCode);
+    await client.query("COMMIT");
+    return { ok: true, user };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function handlePgUserLogin(body) {
+  const client = await pgPool.connect();
+  try {
+    const username = String(body.username || "").trim();
+    const password = String(body.password || "");
+    const row = (await client.query(
+      "SELECT * FROM users WHERE username=$1 AND auth_status='active'",
+      [username],
+    )).rows[0];
+    if (!row || !verifyPgPassword(password, row.password_hash, row.password_salt)) {
+      return { ok: false, error: "Username or password is incorrect." };
+    }
+    const sessionId = crypto.randomUUID();
+    await client.query(
+      `
+      INSERT INTO user_auth_sessions (session_id, user_id, login_date, status)
+      VALUES ($1, $2, CURRENT_DATE::text, 'active')
+      `,
+      [sessionId, row.user_id],
+    );
+    await client.query("UPDATE users SET last_seen_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE user_id=$1", [row.user_id]);
+    return { ok: true, user: publicPgUser(row), sessionId };
+  } finally {
+    client.release();
+  }
+}
+
+async function handlePgUserRequestCode(body) {
+  const { type, value } = normalizeContact(body.targetType, body.target);
+  const purpose = String(body.purpose || "create_account").trim();
+  if (!["create_account", "reset_password", "profile_old_contact", "profile_new_contact"].includes(purpose)) {
+    return { ok: false, error: "Unsupported verification purpose." };
+  }
+  const username = String(body.username || "").trim();
+  if (purpose === "create_account") {
+    const duplicate = (await pgPool.query(
+      "SELECT user_id FROM users WHERE username=$1 OR email=$2 OR phone=$3 LIMIT 1",
+      [username, type === "email" ? value : "", type === "phone" ? value : ""],
+    )).rows[0];
+    if (duplicate) return { ok: false, error: "This username, email, or phone is already registered." };
+  }
+  if (purpose === "reset_password") {
+    const existing = (await pgPool.query(
+      "SELECT user_id FROM users WHERE email=$1 OR phone=$2 LIMIT 1",
+      [type === "email" ? value : "", type === "phone" ? value : ""],
+    )).rows[0];
+    if (!existing) return { ok: false, error: "No account is bound to this email or phone." };
+  }
+  const code = makeVerificationCode();
+  const { passwordHash, passwordSalt } = hashPgPassword(code);
+  const verificationId = `verify_${crypto.randomUUID().replace(/-/g, "")}`;
+  await pgPool.query(
+    `
+    INSERT INTO auth_verification_codes (
+      verification_id, target_type, target_value, purpose, code_hash, code_salt, expires_at
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP + INTERVAL '5 minutes')
+    `,
+    [verificationId, type, value, purpose, passwordHash, passwordSalt],
+  );
+  return {
+    ok: true,
+    verificationId,
+    targetType: type,
+    target: value,
+    expiresInSeconds: 300,
+    delivery: {
+      sent: false,
+      provider: "development-code",
+      message: `Verification code prepared for ${type}. Configure an email/SMS provider to send it automatically.`,
+      devCode: code,
+    },
+  };
+}
+
+async function consumePgVerification(client, verificationId, code, purpose) {
+  const row = (await client.query(
+    `
+    SELECT * FROM auth_verification_codes
+    WHERE verification_id=$1 AND purpose=$2 AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+    `,
+    [String(verificationId || ""), purpose],
+  )).rows[0];
+  if (!row) throw new Error("Verification code expired or does not exist.");
+  if (!verifyPgPassword(String(code || "").trim(), row.code_hash, row.code_salt)) {
+    throw new Error("Verification code is incorrect.");
+  }
+  await client.query("UPDATE auth_verification_codes SET consumed_at=CURRENT_TIMESTAMP WHERE verification_id=$1", [row.verification_id]);
+  return row;
+}
+
+async function handlePgUserCreateAccount(body) {
+  const client = await pgPool.connect();
+  try {
+    const username = String(body.username || "").trim();
+    const password = String(body.password || "");
+    if (!username || !password) return { ok: false, error: "Username and password are required." };
+    if (password.length < 6) return { ok: false, error: "Password must be at least 6 characters." };
+    await client.query("BEGIN");
+    const verification = await consumePgVerification(client, body.verificationId, body.code, "create_account");
+    const duplicate = (await client.query(
+      "SELECT user_id FROM users WHERE username=$1 OR email=$2 OR phone=$3 LIMIT 1",
+      [username, verification.target_type === "email" ? verification.target_value : "", verification.target_type === "phone" ? verification.target_value : ""],
+    )).rows[0];
+    if (duplicate) throw new Error("This username, email, or phone is already registered.");
+    const userId = makeUserId();
+    const { passwordHash, passwordSalt } = hashPgPassword(password);
+    const user = (await client.query(
+      `
+      INSERT INTO users (
+        user_id, username, user_kind, recovery_code, password_hash, password_salt,
+        auth_status, email, phone, last_seen_at
+      )
+      VALUES ($1, $2, 'member', $3, $4, $5, 'active', $6, $7, CURRENT_TIMESTAMP)
+      RETURNING *
+      `,
+      [
+        userId,
+        username,
+        makeRecoveryCode(),
+        passwordHash,
+        passwordSalt,
+        verification.target_type === "email" ? verification.target_value : null,
+        verification.target_type === "phone" ? verification.target_value : null,
+      ],
+    )).rows[0];
+    await pgEnsureMember(client, user.user_id);
+    const sessionId = crypto.randomUUID();
+    await client.query(
+      "INSERT INTO user_auth_sessions (session_id, user_id, login_date, status) VALUES ($1, $2, CURRENT_DATE::text, 'active')",
+      [sessionId, user.user_id],
+    );
+    await client.query("COMMIT");
+    return { ok: true, user: publicPgUser(user), sessionId };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    return { ok: false, error: error.message || "Failed to create account." };
+  } finally {
+    client.release();
+  }
+}
+
+async function handlePgUserResetPassword(body) {
+  const client = await pgPool.connect();
+  try {
+    const newPassword = String(body.newPassword || "");
+    if (newPassword.length < 6) return { ok: false, error: "Password must be at least 6 characters." };
+    await client.query("BEGIN");
+    const verification = await consumePgVerification(client, body.verificationId, body.code, "reset_password");
+    const user = (await client.query(
+      "SELECT * FROM users WHERE email=$1 OR phone=$2 LIMIT 1",
+      [verification.target_type === "email" ? verification.target_value : "", verification.target_type === "phone" ? verification.target_value : ""],
+    )).rows[0];
+    if (!user) throw new Error("No account is bound to this email or phone.");
+    const { passwordHash, passwordSalt } = hashPgPassword(newPassword);
+    await client.query("UPDATE users SET password_hash=$1, password_salt=$2, updated_at=CURRENT_TIMESTAMP WHERE user_id=$3", [passwordHash, passwordSalt, user.user_id]);
+    await client.query("COMMIT");
+    return { ok: true, user: publicPgUser(user) };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    return { ok: false, error: error.message || "Failed to reset password." };
+  } finally {
+    client.release();
+  }
+}
+
+async function handlePgUserAuthSession(body) {
+  const row = (await pgPool.query(
+    `
+    SELECT s.session_id, u.*
+    FROM user_auth_sessions s
+    JOIN users u ON u.user_id = s.user_id
+    WHERE s.session_id=$1 AND s.status='active' AND u.auth_status='active'
+    `,
+    [String(body.sessionId || "")],
+  )).rows[0];
+  if (!row) return { ok: false, error: "Session expired." };
+  await pgPool.query("UPDATE user_auth_sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE session_id=$1", [row.session_id]);
+  return { ok: true, user: publicPgUser(row) };
+}
+
+async function handlePgUserLogout(body) {
+  const sessionId = String(body.sessionId || "").trim();
+  if (sessionId) {
+    await pgPool.query("UPDATE user_auth_sessions SET status='logged_out', last_seen_at=CURRENT_TIMESTAMP WHERE session_id=$1", [sessionId]);
+  }
+  return { ok: true };
+}
+
 async function handleUserSession(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserSession(body);
+      sendJson(res, 200, result);
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "session",
       userId: body.userId,
@@ -493,6 +809,11 @@ async function handleUserSession(req, res) {
 async function handleUserLogin(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserLogin(body);
+      sendJson(res, result.ok === false ? 401 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "login",
       username: body.username,
@@ -509,6 +830,11 @@ async function handleUserLogin(req, res) {
 async function handleUserRequestCode(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserRequestCode(body);
+      sendJson(res, result.ok === false ? 400 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "request_code",
       targetType: body.targetType,
@@ -525,6 +851,11 @@ async function handleUserRequestCode(req, res) {
 async function handleUserCreateAccount(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserCreateAccount(body);
+      sendJson(res, result.ok === false ? 400 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "create_account",
       username: body.username,
@@ -543,6 +874,11 @@ async function handleUserCreateAccount(req, res) {
 async function handleUserResetPassword(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserResetPassword(body);
+      sendJson(res, result.ok === false ? 400 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "reset_password",
       verificationId: body.verificationId,
@@ -558,6 +894,11 @@ async function handleUserResetPassword(req, res) {
 async function handleUserLogout(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserLogout(body);
+      sendJson(res, 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "logout",
       sessionId: body.sessionId,
@@ -571,6 +912,11 @@ async function handleUserLogout(req, res) {
 async function handleUserAuthSession(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserAuthSession(body);
+      sendJson(res, result.ok === false ? 401 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "auth_session",
       sessionId: body.sessionId,
@@ -864,8 +1210,304 @@ async function handleAdminRecordMutation(req, res) {
   }
 }
 
+function splitPgValues(value) {
+  return String(value || "").replace(/[|]/g, ",").split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function parsePgJsonList(value) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  const text = String(value || "").trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : splitPgValues(text);
+  } catch {
+    return splitPgValues(text);
+  }
+}
+
+async function safePgRows(query, params = []) {
+  try {
+    return (await pgPool.query(query, params)).rows;
+  } catch (error) {
+    if (["42P01", "42703"].includes(error.code)) return [];
+    throw error;
+  }
+}
+
+async function pgTaxonomyMap(targetType) {
+  const links = await safePgRows(
+    "SELECT taxonomy_type, taxonomy_id, target_id FROM taxonomy_links WHERE target_type=$1",
+    [targetType],
+  );
+  const result = new Map();
+  for (const link of links) {
+    const list = result.get(link.target_id) || [];
+    list.push(`${link.taxonomy_type}:${link.taxonomy_id}`, String(link.taxonomy_id));
+    result.set(link.target_id, list);
+  }
+  return result;
+}
+
+function pgAssetSource(asset) {
+  if (!asset) return "";
+  if (asset.url) return asset.url;
+  return "";
+}
+
+async function pgAssetMap() {
+  const assets = await safePgRows("SELECT asset_id, url, mime_type FROM assets");
+  return new Map(assets.map((asset) => [asset.asset_id, asset]));
+}
+
+async function loadPgTaxonomy() {
+  const [
+    officialGalleries,
+    communityGalleries,
+    shapes,
+    styles,
+    materials,
+    topics,
+  ] = await Promise.all([
+    safePgRows("SELECT official_gallery_id AS id, gallery_name AS name, description, sort_order, status FROM official_galleries WHERE status='active' ORDER BY sort_order ASC, created_at DESC"),
+    safePgRows("SELECT community_gallery_id AS id, gallery_name AS name, description, 'active' AS status FROM community_galleries ORDER BY created_at DESC"),
+    safePgRows("SELECT shape_id AS id, shape AS name, status FROM shapes WHERE status='on' ORDER BY created_at ASC"),
+    safePgRows("SELECT style_id AS id, style AS name, status FROM styles WHERE status='on' ORDER BY created_at ASC"),
+    safePgRows("SELECT material_id AS id, material AS name, image, status FROM materials WHERE status='on' ORDER BY created_at ASC"),
+    safePgRows("SELECT topic_id AS id, topic AS name, status FROM topics WHERE status='on' ORDER BY created_at ASC"),
+  ]);
+  return {
+    official_galleries: officialGalleries,
+    community_galleries: communityGalleries,
+    shapes,
+    styles,
+    materials,
+    topics,
+  };
+}
+
+async function loadPgTemplates() {
+  const [assets, templateLinks, galleryLinks] = await Promise.all([
+    pgAssetMap(),
+    pgTaxonomyMap("template"),
+    safePgRows("SELECT gallery_type, gallery_id, template_id FROM gallery_templates"),
+  ]);
+  const galleryMap = new Map();
+  for (const link of galleryLinks) {
+    const list = galleryMap.get(link.template_id) || [];
+    list.push(String(link.gallery_id), `${link.gallery_type}:${link.gallery_id}`);
+    galleryMap.set(link.template_id, list);
+  }
+  const items = await safePgRows(`
+    SELECT
+      t.template_id,
+      t.source_type,
+      t.template_name,
+      t.template_title,
+      t.description,
+      t.design_type,
+      t.nail_shape,
+      t.material_type,
+      t.shape_categories,
+      t.style_categories,
+      t.material_categories,
+      t.topic_tags,
+      t.tags,
+      t.author_user_id,
+      t.author_display_name,
+      t.author_level,
+      t.view_count,
+      t.heat_count,
+      t.like_count,
+      t.favorite_count,
+      t.comment_count,
+      t.published_at,
+      t.image_asset_ids,
+      COALESCE(a.asset_id, '') AS image_asset_id,
+      COALESCE(a.url, '') AS image_url
+    FROM templates t
+    LEFT JOIN assets a ON a.asset_id = COALESCE(t.cover_asset_id, t.image_asset_id)
+    WHERE t.status='active' AND t.visibility='public' AND t.source_type IN ('official', 'community')
+    ORDER BY COALESCE(t.published_at, t.created_at) DESC
+  `);
+  return items.map((item) => {
+    const imageList = [];
+    for (const assetId of parsePgJsonList(item.image_asset_ids)) {
+      const source = pgAssetSource(assets.get(assetId));
+      if (source) imageList.push(source);
+    }
+    if (!imageList.length && item.image_url) imageList.push(item.image_url);
+    const categoryIds = [
+      ...(templateLinks.get(item.template_id) || []),
+      ...(galleryMap.get(item.template_id) || []),
+      ...splitPgValues(item.shape_categories),
+      ...splitPgValues(item.style_categories),
+      ...splitPgValues(item.material_categories),
+      ...splitPgValues(item.topic_tags),
+      ...splitPgValues(item.tags),
+    ];
+    if (item.nail_shape) categoryIds.push(item.nail_shape, `shapes:${item.nail_shape}`);
+    if (item.material_type) categoryIds.push(item.material_type, `materials:${item.material_type}`);
+    if (item.design_type) categoryIds.push(`type-${item.design_type}`);
+    return {
+      ...item,
+      image_url: item.image_url || imageList[0] || "",
+      image_base64: "",
+      image_list: imageList,
+      category_ids: [...new Set(categoryIds)].sort(),
+    };
+  });
+}
+
+async function loadPgMaterialBases() {
+  const assets = await pgAssetMap();
+  const items = await safePgRows(`
+    SELECT
+      t.template_id,
+      t.source_type,
+      t.template_name,
+      t.template_title,
+      t.nail_shape,
+      t.material_type,
+      t.shape_categories,
+      t.material_categories,
+      t.image_asset_ids,
+      COALESCE(a.asset_id, '') AS image_asset_id,
+      COALESCE(a.url, '') AS image_url
+    FROM templates t
+    LEFT JOIN assets a ON a.asset_id = COALESCE(t.cover_asset_id, t.image_asset_id)
+    WHERE t.source_type='official'
+      AND (t.template_id LIKE 'official_%_printing-nail-%' OR t.material_type LIKE 'm%')
+    ORDER BY COALESCE(t.updated_at, t.created_at) DESC
+  `);
+  return items.map((item) => {
+    const imageList = [];
+    for (const assetId of parsePgJsonList(item.image_asset_ids)) {
+      const source = pgAssetSource(assets.get(assetId));
+      if (source) imageList.push(source);
+    }
+    if (!imageList.length && item.image_url) imageList.push(item.image_url);
+    return {
+      ...item,
+      image_base64: "",
+      image_url: item.image_url || imageList[0] || "",
+      image_list: imageList,
+    };
+  }).filter((item) => item.image_list.length || item.image_url);
+}
+
+async function loadPgProducts() {
+  const productLinks = await pgTaxonomyMap("product");
+  const items = await safePgRows(`
+    SELECT
+      p.product_id,
+      p.product_type,
+      p.product_name,
+      p.unit_price,
+      p.product_info,
+      p.style_tags,
+      p.nail_shape,
+      p.stock_quantity,
+      p.stock_s,
+      p.stock_m,
+      p.stock_l,
+      p.stock_xl,
+      p.pickup_method,
+      p.is_featured,
+      p.status,
+      COALESCE(NULLIF(p.image_url, ''), a.url, '') AS image_url
+    FROM products p
+    LEFT JOIN assets a ON a.asset_id = p.cover_asset_id
+    WHERE p.status='active'
+    ORDER BY p.created_at DESC
+  `);
+  return items.map((item) => {
+    const categoryIds = [...(productLinks.get(item.product_id) || []), ...splitPgValues(item.style_tags)];
+    if (item.nail_shape) categoryIds.push(item.nail_shape, `shapes:${item.nail_shape}`);
+    if (item.product_type) categoryIds.push(`product-type:${item.product_type}`);
+    const pickupMethod = ["pickup", "shipping", "both"].includes(String(item.pickup_method || "").toLowerCase())
+      ? String(item.pickup_method).toLowerCase()
+      : "both";
+    return {
+      ...item,
+      image_base64: "",
+      category_ids: [...new Set(categoryIds)].sort(),
+      delivery_mode: pickupMethod,
+      supports_pickup: ["pickup", "both"].includes(pickupMethod),
+      supports_shipping: ["shipping", "both"].includes(pickupMethod),
+    };
+  });
+}
+
+async function loadPgEvents() {
+  const assets = await pgAssetMap();
+  const items = await safePgRows(`
+    SELECT
+      e.event_id,
+      e.event_type,
+      e.event_name,
+      e.event_title,
+      e.event_content,
+      e.html_url,
+      e.start_at,
+      e.expires_at,
+      e.sort_order,
+      e.status,
+      e.banner_asset_id,
+      e.promo_asset_id,
+      COALESCE(pa.image_url, '') AS promo_image_url
+    FROM events e
+    LEFT JOIN promotional_assets pa ON pa.promo_asset_id = e.promo_asset_id
+    WHERE e.status='active'
+    ORDER BY e.sort_order ASC, e.created_at DESC
+  `);
+  return items.map((item) => ({
+    ...item,
+    promo_image_base64: "",
+    image: pgAssetSource(assets.get(item.banner_asset_id)) || item.promo_image_url || "",
+  }));
+}
+
+async function loadPgArticles() {
+  const articleLinks = await pgTaxonomyMap("article");
+  const items = await safePgRows(`
+    SELECT
+      ar.article_id,
+      ar.article_type,
+      ar.title,
+      ar.content,
+      ar.related_topics,
+      ar.heat_count,
+      ar.created_at,
+      COALESCE(u.username, u.user_id) AS author_name
+    FROM articles ar
+    LEFT JOIN users u ON u.user_id = ar.author_user_id
+    WHERE ar.status='published'
+    ORDER BY ar.created_at DESC
+  `);
+  return items.map((item) => {
+    const categoryIds = [...(articleLinks.get(item.article_id) || []), ...splitPgValues(item.related_topics)];
+    if (item.article_type) categoryIds.push(`article-type:${item.article_type}`);
+    return { ...item, category_ids: [...new Set(categoryIds)].sort() };
+  });
+}
+
 async function handleGalleryTaxonomy(req, res) {
   try {
+    if (hasPostgresRuntime()) {
+      const taxonomy = await loadPgTaxonomy();
+      sendJson(res, 200, {
+        ok: true,
+        data: {
+          official_galleries: taxonomy.official_galleries,
+          community_galleries: taxonomy.community_galleries,
+          shapes: taxonomy.shapes,
+          styles: taxonomy.styles,
+          materials: taxonomy.materials,
+        },
+      }, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "gallery_taxonomy.py"), {});
     sendJson(res, 200, result, { "Cache-Control": "no-store" });
   } catch (error) {
@@ -875,6 +1517,28 @@ async function handleGalleryTaxonomy(req, res) {
 
 async function handlePublicCatalog(req, res) {
   try {
+    if (hasPostgresRuntime()) {
+      const [taxonomy, templates, materialBases, products, events, community] = await Promise.all([
+        loadPgTaxonomy(),
+        loadPgTemplates(),
+        loadPgMaterialBases(),
+        loadPgProducts(),
+        loadPgEvents(),
+        loadPgArticles(),
+      ]);
+      sendJson(res, 200, {
+        ok: true,
+        data: {
+          taxonomy,
+          templates,
+          material_bases: materialBases,
+          products,
+          events,
+          community,
+        },
+      }, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "public_catalog.py"), {});
     sendJson(res, 200, result, { "Cache-Control": "no-store" });
   } catch (error) {
@@ -1762,30 +2426,54 @@ function readJson(req) {
 
 function runPythonJsonScript(scriptPath, payload) {
   return new Promise((resolve, reject) => {
-    const python = process.env.PYTHON_EXE || (fs.existsSync(bundledPython) ? bundledPython : "python");
-    const child = spawn(python, [scriptPath], {
-      cwd: root,
-      env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
-      windowsHide: true,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || stdout.trim() || `Python script exited with ${code}`));
+    const pythonCandidates = [
+      process.env.PYTHON_EXE,
+      process.env.PYTHON_BIN,
+      fs.existsSync(bundledPython) ? bundledPython : "",
+      "python3",
+      "python",
+      "py",
+    ].filter(Boolean);
+    let lastError = null;
+    let index = 0;
+    const trySpawn = () => {
+      if (index >= pythonCandidates.length) {
+        reject(new Error(`Python runtime not found. Tried: ${pythonCandidates.join(", ")}${lastError ? `. Last error: ${lastError.message}` : ""}`));
         return;
       }
-      try {
-        resolve(JSON.parse(stdout || "{}"));
-      } catch (error) {
-        reject(new Error(`Invalid Python JSON response: ${stdout.slice(0, 500)}`));
-      }
-    });
-    child.stdin.end(JSON.stringify(payload));
+      const python = pythonCandidates[index++];
+      const child = spawn(python, [scriptPath], {
+        cwd: root,
+        env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
+        windowsHide: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+      child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+      child.on("error", (error) => {
+        if (error.code === "ENOENT") {
+          lastError = error;
+          trySpawn();
+          return;
+        }
+        reject(error);
+      });
+      child.on("close", (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr.trim() || stdout.trim() || `${python} exited with ${code}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(stdout || "{}"));
+        } catch (error) {
+          reject(new Error(`Invalid Python JSON response: ${stdout.slice(0, 500)}`));
+        }
+      });
+      child.stdin.end(JSON.stringify(payload || {}));
+    };
+    trySpawn();
   });
 }
 
