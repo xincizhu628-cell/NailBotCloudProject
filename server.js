@@ -597,6 +597,33 @@ async function savePgTemplateUpload(body, sourceType) {
   }
 }
 
+function cleanPgText(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function pgNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function pgInteger(value, fallback = 0) {
+  const number = Number.parseInt(value, 10);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function pgFlag(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  return ["1", "true", "yes", "on", "featured"].includes(text) ? 1 : 0;
+}
+
+function pgDataUrlOrBase64(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.startsWith("data:image/")) return text;
+  return `data:image/png;base64,${text}`;
+}
+
 function hasPostgresRuntime() {
   return Boolean(pgPool);
 }
@@ -940,6 +967,47 @@ async function handlePgUserProfile(body) {
     },
     sessionId: session.sessionId,
   };
+}
+
+async function handlePgUserUpdateContact(body) {
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    const session = await getPgAuthSession(body.sessionId);
+    if (!session.ok) {
+      await client.query("ROLLBACK");
+      return session;
+    }
+    const targetType = String(body.targetType || "").trim().toLowerCase() === "phone" ? "phone" : "email";
+    const currentValue = targetType === "phone" ? session.row.phone : session.row.email;
+    if (currentValue) {
+      const oldCheck = await consumePgVerification(client, body.oldVerificationId, body.oldCode, "profile_old_contact");
+      if (oldCheck.target_type !== targetType || oldCheck.target_value !== currentValue) {
+        throw new Error("Old contact verification does not match this account.");
+      }
+    }
+    const next = normalizeContact(targetType, body.newTarget);
+    const newCheck = await consumePgVerification(client, body.newVerificationId, body.newCode, "profile_new_contact");
+    if (newCheck.target_type !== next.type || newCheck.target_value !== next.value) {
+      throw new Error("New contact verification does not match.");
+    }
+    const duplicate = (await client.query(
+      `SELECT user_id FROM users WHERE ${next.type === "phone" ? "phone" : "email"}=$1 AND user_id<>$2 LIMIT 1`,
+      [next.value, session.user.userId],
+    )).rows[0];
+    if (duplicate) throw new Error("This contact is already used by another account.");
+    await client.query(
+      `UPDATE users SET ${next.type === "phone" ? "phone" : "email"}=$1, updated_at=CURRENT_TIMESTAMP WHERE user_id=$2`,
+      [next.value, session.user.userId],
+    );
+    await client.query("COMMIT");
+    return { ok: true, user: { ...session.user, [next.type]: next.value } };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    return { ok: false, error: error.message || "Failed to update contact." };
+  } finally {
+    client.release();
+  }
 }
 
 async function handlePgUserPromos(body) {
@@ -1332,15 +1400,24 @@ async function handlePgAdminModels() {
     taxonomy,
     templates,
     products,
+    rewards,
     events,
+    tasks,
+    promoAssets,
+    promotions,
     users,
     orders,
     userActions,
+    deviceInfo,
   ] = await Promise.all([
     loadPgTaxonomy(),
     loadPgTemplates(),
     loadPgProducts(),
+    safePgRows("SELECT * FROM rewards ORDER BY created_at DESC"),
     loadPgEvents(),
+    safePgRows("SELECT * FROM tasks ORDER BY created_at DESC"),
+    safePgRows("SELECT promo_asset_id, image_url, image_base64, created_at FROM promotional_assets ORDER BY created_at DESC"),
+    safePgRows("SELECT * FROM promotion ORDER BY created_at DESC"),
     safePgRows("SELECT user_id, username, user_kind, recovery_code, email, phone, gender, created_at, last_seen_at FROM users ORDER BY created_at DESC"),
     safePgRows(`
       SELECT o.order_id, o.user_id, u.username, o.total_price, o.pay_method, o.payment_status,
@@ -1355,6 +1432,7 @@ async function handlePgAdminModels() {
       LEFT JOIN users u ON u.user_id = ua.user_id
       ORDER BY ua.created_at DESC
     `),
+    safePgRows("SELECT id, equip_id, type, address, status, created_at, updated_at FROM device_info ORDER BY created_at DESC"),
   ]);
   const officialRows = templates.filter((item) => item.source_type === "official").map((item) => ({
     id: item.template_id,
@@ -1411,12 +1489,64 @@ async function handlePgAdminModels() {
     is_featured: item.is_featured,
     status: item.status,
   }));
+  const rewardRows = rewards.map((item) => ({
+    item_kind: "reward",
+    id: item.reward_id,
+    name: item.reward_name,
+    type: item.reward_type,
+    image: item.image_url || item.image_base64,
+    image_url: item.image_url,
+    image_base64: item.image_base64,
+    image_preview_url: item.image_url || item.image_base64,
+    info: item.reward_info,
+    nail_shape: "",
+    style_tags: "",
+    price_or_points: item.unit_point_cost,
+    stock_quantity: item.stock_quantity,
+    stock_s: item.stock_s,
+    stock_m: item.stock_m,
+    stock_l: item.stock_l,
+    stock_xl: item.stock_xl,
+    stock_by_size: `S:${item.stock_s || 0} / M:${item.stock_m || 0} / L:${item.stock_l || 0} / XL:${item.stock_xl || 0}`,
+    pickup_method: item.pickup_method,
+    is_featured: item.is_featured,
+    status: item.status,
+  }));
   return {
     ok: true,
     models: {
-      product: adminModel("Official Product / Reward Library", "id", productRows, {
+      product: adminModel("Official Product / Reward Library", "id", [...productRows, ...rewardRows], {
         kindKey: "item_kind",
         columns: ["item_kind", "id", "name", "type", "nail_shape", "price_or_points", "stock_by_size", "pickup_method", "is_featured", "status"],
+      }),
+      "promo-assets": adminModel("Promotional Assets", "promo_asset_id", promoAssets.map((item) => ({
+        ...item,
+        image: item.image_url || item.image_base64 || "",
+        image_preview_url: item.image_url || item.image_base64 || "",
+        has_image_base64: Boolean(item.image_base64),
+      })), {
+        columns: ["promo_asset_id", "image", "created_at"],
+        fields: [
+          { name: "image_url", label: "Image URL", type: "text" },
+          { name: "image_file", label: "Upload image", type: "file" },
+        ],
+      }),
+      promotion: adminModel("Promotion", "promo_id", promotions, {
+        columns: ["promo_id", "promo_title", "promo_type", "promo_content", "expire_date", "status"],
+        fields: [
+          { name: "promo_id", label: "Promo ID", type: "text" },
+          { name: "promo_title", label: "Title", type: "text" },
+          { name: "promo_type", label: "Type", type: "select", options: ["满减优惠", "折扣优惠", "买送优惠", "免费商品"].map((value) => ({ value, label: value })) },
+          { name: "min_spend", label: "Min spend", type: "number", promoTypes: ["满减优惠"] },
+          { name: "amount_off", label: "Amount off", type: "number", promoTypes: ["满减优惠"] },
+          { name: "discount_percent", label: "Discount percent", type: "number", promoTypes: ["折扣优惠"] },
+          { name: "buy_quantity", label: "Buy quantity", type: "number", promoTypes: ["买送优惠"] },
+          { name: "gift_quantity", label: "Gift quantity", type: "number", promoTypes: ["买送优惠"] },
+          { name: "free_product", label: "Free product", type: "text", promoTypes: ["免费商品"] },
+          { name: "description", label: "Description", type: "textarea" },
+          { name: "expire_date", label: "Expire date", type: "date" },
+          { name: "status", label: "Status", type: "select", options: [{ value: "active", label: "active" }, { value: "inactive", label: "inactive" }] },
+        ],
       }),
       official: adminModel("Official Factory Gallery", "template_id", officialRows, {
         columns: ["template_id", "template_name", "design_type", "nail_shape", "material_type", "like_count", "comment_count", "published_at"],
@@ -1429,9 +1559,46 @@ async function handlePgAdminModels() {
       }),
       event: adminModel("Events", "event_id", events, {
         columns: ["event_id", "event_name", "event_type", "html_url", "start_at", "expires_at", "status"],
+        fields: [
+          { name: "event_type", label: "Event type", type: "text" },
+          { name: "event_name", label: "Event name", type: "text" },
+          { name: "event_title", label: "Title", type: "text" },
+          { name: "event_content", label: "Content", type: "textarea" },
+          { name: "image_file", label: "Banner image", type: "file" },
+          { name: "html_url", label: "HTML URL", type: "text" },
+          { name: "start_at", label: "Start date", type: "date" },
+          { name: "expires_at", label: "Expiry date", type: "date" },
+          { name: "status", label: "Status", type: "select", options: [{ value: "active", label: "active" }, { value: "inactive", label: "inactive" }] },
+        ],
+      }),
+      task: adminModel("Tasks", "task_id", tasks, {
+        columns: ["task_id", "event_id", "task_type", "task_name", "submission_type", "allowed_platforms", "reward_points", "expires_at", "status"],
+        fields: [
+          { name: "event_id", label: "Bind event ID", type: "text" },
+          { name: "task_type", label: "Task type", type: "text" },
+          { name: "task_name", label: "Task name", type: "text" },
+          { name: "task_title", label: "Title", type: "text" },
+          { name: "task_content", label: "Content", type: "textarea" },
+          { name: "submission_type", label: "Submission type", type: "select", options: [{ value: "text", label: "text" }, { value: "file", label: "file" }, { value: "url", label: "url" }] },
+          { name: "allowed_platforms", label: "Allowed platforms", type: "text" },
+          { name: "reward_points", label: "Reward points", type: "number" },
+          { name: "image_file", label: "Promo image", type: "file" },
+          { name: "start_at", label: "Start date", type: "date" },
+          { name: "expires_at", label: "Expiry date", type: "date" },
+          { name: "status", label: "Status", type: "select", options: [{ value: "active", label: "active" }, { value: "inactive", label: "inactive" }] },
+        ],
       }),
       orders: adminModel("Orders", "order_id", orders, { editable: false }),
       "user-actions": adminModel("User Actions", "action_id", userActions, { editable: false }),
+      "device-info": adminModel("Device Info", "id", deviceInfo, {
+        columns: ["id", "equip_id", "type", "address", "status", "updated_at"],
+        fields: [
+          { name: "equip_id", label: "Equipment ID", type: "text" },
+          { name: "type", label: "Type", type: "select", options: [{ value: "主机", label: "主机" }, { value: "打印机", label: "打印机" }] },
+          { name: "address", label: "Address", type: "text" },
+          { name: "status", label: "Status", type: "select", options: [{ value: "active", label: "active" }, { value: "inactive", label: "inactive" }] },
+        ],
+      }),
       taxonomy: {
         title: "Taxonomy",
         editable: true,
@@ -1468,10 +1635,401 @@ async function handlePgAdminProductImage(url) {
     row = (await pgPool.query("SELECT url AS image_url, base64_data FROM assets WHERE asset_id=$1", [id])).rows[0];
   } else if (itemKind === "promo") {
     row = (await pgPool.query("SELECT image_url, image_base64 AS base64_data FROM promotional_assets WHERE promo_asset_id=$1", [id])).rows[0];
+  } else if (itemKind === "reward") {
+    row = (await pgPool.query("SELECT image_url, image_base64 AS base64_data FROM rewards WHERE reward_id=$1", [id])).rows[0];
   } else {
     row = (await pgPool.query("SELECT image_url, image_base64 AS base64_data FROM products WHERE product_id=$1", [id])).rows[0];
   }
   return { ok: Boolean(row?.image_url || row?.base64_data), image_url: row?.image_url || "", image_base64: row?.base64_data || "" };
+}
+
+const pgTaxonomyTables = {
+  styles: { id: "style_id", label: "style", table: "styles" },
+  shapes: { id: "shape_id", label: "shape", table: "shapes" },
+  materials: { id: "material_id", label: "material", table: "materials" },
+  topics: { id: "topic_id", label: "topic", table: "topics" },
+  tags: { id: "tag_id", label: "tag", table: "tags" },
+};
+
+function pgTaxonomyMeta(table) {
+  const meta = pgTaxonomyTables[String(table || "")];
+  if (!meta) throw new Error("Unsupported taxonomy table.");
+  return meta;
+}
+
+async function listPgTaxonomyTable(table) {
+  const meta = pgTaxonomyMeta(table);
+  if (table === "topics") {
+    return safePgRows(`SELECT topic_id, topic, view_number, attendance_number, status FROM topics ORDER BY created_at DESC`);
+  }
+  if (table === "tags") {
+    return safePgRows(`SELECT tag_id, tag, viewed_number, attendance_number, created_by_type, status FROM tags ORDER BY created_at DESC`);
+  }
+  if (table === "materials") {
+    return safePgRows(`SELECT material_id, material, image, status FROM materials ORDER BY created_at DESC`);
+  }
+  return safePgRows(`SELECT ${meta.id}, ${meta.label}, status FROM ${meta.table} ORDER BY created_at DESC`);
+}
+
+async function handlePgAdminTaxonomy(req, body, action) {
+  if (action === "list") {
+    const [styles, shapes, materials, topics, tags] = await Promise.all([
+      listPgTaxonomyTable("styles"),
+      listPgTaxonomyTable("shapes"),
+      listPgTaxonomyTable("materials"),
+      listPgTaxonomyTable("topics"),
+      listPgTaxonomyTable("tags"),
+    ]);
+    return { ok: true, data: { styles, shapes, materials, topics, tags } };
+  }
+  const table = String(body.table || "");
+  const meta = pgTaxonomyMeta(table);
+  const item = body.item || {};
+  if (action === "create") {
+    const name = cleanPgText(item[meta.label] || item.name);
+    if (!name) return { ok: false, error: "Name is required." };
+    let row;
+    if (table === "materials") {
+      row = (await pgPool.query(
+        "INSERT INTO materials (material, image, status) VALUES ($1, $2, COALESCE($3, 'on')) ON CONFLICT (material) DO UPDATE SET image=EXCLUDED.image, status=EXCLUDED.status, updated_at=CURRENT_TIMESTAMP RETURNING material_id AS id",
+        [name, cleanPgText(item.image), cleanPgText(item.status, "on")],
+      )).rows[0];
+    } else if (table === "tags") {
+      row = (await pgPool.query(
+        "INSERT INTO tags (tag, status) VALUES ($1, COALESCE($2, 'on')) ON CONFLICT (tag) DO UPDATE SET status=EXCLUDED.status, updated_at=CURRENT_TIMESTAMP RETURNING tag_id AS id",
+        [name, cleanPgText(item.status, "on")],
+      )).rows[0];
+    } else if (table === "topics") {
+      row = (await pgPool.query(
+        "INSERT INTO topics (topic, status) VALUES ($1, COALESCE($2, 'on')) RETURNING topic_id AS id",
+        [name, cleanPgText(item.status, "on")],
+      )).rows[0];
+    } else {
+      row = (await pgPool.query(
+        `INSERT INTO ${meta.table} (${meta.label}, status) VALUES ($1, COALESCE($2, 'on')) ON CONFLICT (${meta.label}) DO UPDATE SET status=EXCLUDED.status, updated_at=CURRENT_TIMESTAMP RETURNING ${meta.id} AS id`,
+        [name, cleanPgText(item.status, "on")],
+      )).rows[0];
+    }
+    return { ok: true, id: row?.id, data: await listPgTaxonomyTable(table) };
+  }
+  const id = String(body.id || item.id || "").trim();
+  if (!id) return { ok: false, error: "ID is required." };
+  if (action === "delete") {
+    await pgPool.query(`DELETE FROM ${meta.table} WHERE ${meta.id}=$1`, [id]);
+    return { ok: true, id, data: await listPgTaxonomyTable(table) };
+  }
+  const status = item.status ? cleanPgText(item.status) : null;
+  const name = item[meta.label] || item.name;
+  if (table === "materials") {
+    await pgPool.query(
+      "UPDATE materials SET material=COALESCE(NULLIF($1, ''), material), image=COALESCE($2, image), status=COALESCE($3, status), updated_at=CURRENT_TIMESTAMP WHERE material_id=$4",
+      [cleanPgText(name), item.image === undefined ? null : cleanPgText(item.image), status, id],
+    );
+  } else if (table === "topics") {
+    await pgPool.query(
+      "UPDATE topics SET topic=COALESCE(NULLIF($1, ''), topic), status=COALESCE($2, status) WHERE topic_id=$3",
+      [cleanPgText(name), status, id],
+    );
+  } else {
+    await pgPool.query(
+      `UPDATE ${meta.table} SET ${meta.label}=COALESCE(NULLIF($1, ''), ${meta.label}), status=COALESCE($2, status), updated_at=CURRENT_TIMESTAMP WHERE ${meta.id}=$3`,
+      [cleanPgText(name), status, id],
+    );
+  }
+  return { ok: true, id, data: await listPgTaxonomyTable(table) };
+}
+
+async function handlePgAdminImportProduct(body, itemType) {
+  if (body.source === "xlsx") {
+    return { ok: false, error: "Cloud XLSX import is not enabled yet. Please use single item import for Railway." };
+  }
+  const item = body.item || {};
+  if (itemType === "reward") {
+    const rewardId = cleanPgText(item.reward_id || item.id, `reward_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`);
+    await pgPool.query(
+      `
+      INSERT INTO rewards (
+        reward_id, reward_name, reward_type, unit_point_cost, reward_info, image_url, image_base64,
+        pickup_method, is_featured, stock_quantity, stock_s, stock_m, stock_l, stock_xl, status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15, 'active'))
+      ON CONFLICT (reward_id) DO UPDATE SET
+        reward_name=EXCLUDED.reward_name,
+        reward_type=EXCLUDED.reward_type,
+        unit_point_cost=EXCLUDED.unit_point_cost,
+        reward_info=EXCLUDED.reward_info,
+        image_url=EXCLUDED.image_url,
+        image_base64=EXCLUDED.image_base64,
+        pickup_method=EXCLUDED.pickup_method,
+        is_featured=EXCLUDED.is_featured,
+        stock_quantity=EXCLUDED.stock_quantity,
+        stock_s=EXCLUDED.stock_s,
+        stock_m=EXCLUDED.stock_m,
+        stock_l=EXCLUDED.stock_l,
+        stock_xl=EXCLUDED.stock_xl,
+        status=EXCLUDED.status
+      `,
+      [
+        rewardId,
+        cleanPgText(item.reward_name || item.name, rewardId),
+        cleanPgText(item.reward_type || item.type, "coupon"),
+        pgInteger(item.unit_point_cost || item.price_or_points),
+        cleanPgText(item.reward_info || item.info),
+        cleanPgText(item.image_url),
+        pgDataUrlOrBase64(item.image_base64),
+        cleanPgText(item.pickup_method, "pickup"),
+        pgFlag(item.is_featured),
+        pgInteger(item.stock_quantity || item.stock),
+        pgInteger(item.stock_s),
+        pgInteger(item.stock_m),
+        pgInteger(item.stock_l),
+        pgInteger(item.stock_xl),
+        cleanPgText(item.status, "active"),
+      ],
+    );
+    return { ok: true, imported: 1, itemType: "reward", ids: [rewardId], models: await handlePgAdminModels() };
+  }
+  const productId = cleanPgText(item.product_id || item.id, `product_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`);
+  await pgPool.query(
+    `
+    INSERT INTO products (
+      product_id, product_type, product_name, unit_price, product_info, image_url, image_base64,
+      style_tags, nail_shape, stock_quantity, stock_s, stock_m, stock_l, stock_xl,
+      on_delivery, pickup_method, is_featured, status
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, COALESCE($18, 'active'))
+    ON CONFLICT (product_id) DO UPDATE SET
+      product_type=EXCLUDED.product_type,
+      product_name=EXCLUDED.product_name,
+      unit_price=EXCLUDED.unit_price,
+      product_info=EXCLUDED.product_info,
+      image_url=EXCLUDED.image_url,
+      image_base64=EXCLUDED.image_base64,
+      style_tags=EXCLUDED.style_tags,
+      nail_shape=EXCLUDED.nail_shape,
+      stock_quantity=EXCLUDED.stock_quantity,
+      stock_s=EXCLUDED.stock_s,
+      stock_m=EXCLUDED.stock_m,
+      stock_l=EXCLUDED.stock_l,
+      stock_xl=EXCLUDED.stock_xl,
+      on_delivery=EXCLUDED.on_delivery,
+      pickup_method=EXCLUDED.pickup_method,
+      is_featured=EXCLUDED.is_featured,
+      status=EXCLUDED.status
+    `,
+    [
+      productId,
+      cleanPgText(item.product_type || item.type, "Press-On Nail"),
+      cleanPgText(item.product_name || item.name, productId),
+      pgNumber(item.unit_price || item.price_or_points),
+      cleanPgText(item.product_info || item.info),
+      cleanPgText(item.image_url),
+      pgDataUrlOrBase64(item.image_base64),
+      cleanPgText(item.style_tags),
+      cleanPgText(item.nail_shape),
+      pgInteger(item.stock_quantity || item.stock),
+      pgInteger(item.stock_s),
+      pgInteger(item.stock_m),
+      pgInteger(item.stock_l),
+      pgInteger(item.stock_xl),
+      item.on_delivery === undefined ? 1 : pgFlag(item.on_delivery),
+      cleanPgText(item.pickup_method, "both"),
+      pgFlag(item.is_featured),
+      cleanPgText(item.status, "active"),
+    ],
+  );
+  return { ok: true, imported: 1, itemType: "product", ids: [productId], models: await handlePgAdminModels() };
+}
+
+function pgPromotionContent(item) {
+  if (item.promo_content) return String(item.promo_content);
+  const content = {};
+  for (const key of ["min_spend", "amount_off", "discount_percent", "buy_quantity", "gift_quantity", "gift_product", "free_product", "description"]) {
+    if (item[key] !== undefined && item[key] !== "") content[key] = item[key];
+  }
+  return JSON.stringify(content);
+}
+
+async function handlePgAdminCreateRecord(body) {
+  const moduleName = String(body.module || "").trim();
+  const item = body.item || {};
+  if (moduleName === "promo-assets") {
+    const row = (await pgPool.query(
+      "INSERT INTO promotional_assets (image_url, image_base64) VALUES ($1, $2) RETURNING promo_asset_id",
+      [cleanPgText(item.image_url), pgDataUrlOrBase64(item.image_base64)],
+    )).rows[0];
+    const models = await handlePgAdminModels();
+    return { ok: true, id: row?.promo_asset_id, rows: models.models["promo-assets"]?.rows || [] };
+  }
+  if (moduleName === "promotion") {
+    const promoId = cleanPgText(item.promo_id || item.id, `promo_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`);
+    await pgPool.query(
+      `
+      INSERT INTO promotion (promo_id, promo_title, promo_type, promo_content, expire_date, status)
+      VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'active'))
+      ON CONFLICT (promo_id) DO UPDATE SET
+        promo_title=EXCLUDED.promo_title,
+        promo_type=EXCLUDED.promo_type,
+        promo_content=EXCLUDED.promo_content,
+        expire_date=EXCLUDED.expire_date,
+        status=EXCLUDED.status,
+        updated_at=CURRENT_TIMESTAMP
+      `,
+      [
+        promoId,
+        cleanPgText(item.promo_title || item.title, promoId),
+        cleanPgText(item.promo_type, "折扣优惠"),
+        pgPromotionContent(item),
+        cleanPgText(item.expire_date),
+        cleanPgText(item.status, "active"),
+      ],
+    );
+    const models = await handlePgAdminModels();
+    return { ok: true, id: promoId, rows: models.models.promotion?.rows || [] };
+  }
+  if (moduleName === "event") {
+    let promoAssetId = cleanPgText(item.promo_asset_id);
+    if (!promoAssetId && (item.image_base64 || item.image_url)) {
+      promoAssetId = (await pgPool.query(
+        "INSERT INTO promotional_assets (image_url, image_base64) VALUES ($1, $2) RETURNING promo_asset_id",
+        [cleanPgText(item.image_url), pgDataUrlOrBase64(item.image_base64)],
+      )).rows[0]?.promo_asset_id;
+    }
+    const row = (await pgPool.query(
+      `
+      INSERT INTO events (event_type, event_name, event_title, event_content, promo_asset_id, html_url, start_at, expires_at, status, sort_order)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, 'active'), $10)
+      RETURNING event_id
+      `,
+      [
+        cleanPgText(item.event_type, "general"),
+        cleanPgText(item.event_name || item.name, "Untitled Event"),
+        cleanPgText(item.event_title || item.title),
+        cleanPgText(item.event_content || item.content),
+        promoAssetId || null,
+        cleanPgText(item.html_url),
+        cleanPgText(item.start_at || item.start_date),
+        cleanPgText(item.expires_at || item.expire_date),
+        cleanPgText(item.status, "active"),
+        pgInteger(item.sort_order),
+      ],
+    )).rows[0];
+    const models = await handlePgAdminModels();
+    return { ok: true, id: row?.event_id, rows: models.models.event?.rows || [] };
+  }
+  if (moduleName === "task") {
+    let promoAssetId = cleanPgText(item.promo_asset_id);
+    if (!promoAssetId && (item.image_base64 || item.image_url)) {
+      promoAssetId = (await pgPool.query(
+        "INSERT INTO promotional_assets (image_url, image_base64) VALUES ($1, $2) RETURNING promo_asset_id",
+        [cleanPgText(item.image_url), pgDataUrlOrBase64(item.image_base64)],
+      )).rows[0]?.promo_asset_id;
+    }
+    const row = (await pgPool.query(
+      `
+      INSERT INTO tasks (
+        event_id, task_type, task_name, task_title, task_content, promo_asset_id,
+        submission_type, allowed_platforms, reward_points, start_at, expires_at, status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, 'active'))
+      RETURNING task_id
+      `,
+      [
+        cleanPgText(item.event_id || item.eventId) || null,
+        cleanPgText(item.task_type, "design_upload"),
+        cleanPgText(item.task_name || item.name, "Untitled Task"),
+        cleanPgText(item.task_title || item.title),
+        cleanPgText(item.task_content || item.content),
+        promoAssetId || null,
+        cleanPgText(item.submission_type, "text"),
+        cleanPgText(item.allowed_platforms),
+        pgInteger(item.reward_points),
+        cleanPgText(item.start_at || item.start_date),
+        cleanPgText(item.expires_at || item.expire_date),
+        cleanPgText(item.status, "active"),
+      ],
+    )).rows[0];
+    const models = await handlePgAdminModels();
+    return { ok: true, id: row?.task_id, rows: models.models.task?.rows || [] };
+  }
+  if (moduleName === "community") {
+    const result = await savePgTemplateUpload({
+      ...item,
+      image: item.image_base64 || item.image,
+      templateName: item.template_name || item.templateName || item.name,
+    }, "community");
+    const models = await handlePgAdminModels();
+    return { ...result, id: result.templateId, rows: models.models.community?.rows || [] };
+  }
+  if (moduleName === "device-info") {
+    const row = (await pgPool.query(
+      "INSERT INTO device_info (equip_id, type, address, status) VALUES ($1, $2, $3, COALESCE($4, 'active')) RETURNING id",
+      [cleanPgText(item.equip_id || item.id, `equip_${Date.now()}`), cleanPgText(item.type, "打印机"), cleanPgText(item.address), cleanPgText(item.status, "active")],
+    )).rows[0];
+    const models = await handlePgAdminModels();
+    return { ok: true, id: row?.id, rows: models.models["device-info"]?.rows || [] };
+  }
+  return { ok: false, error: `Cloud create is not implemented for ${moduleName}.` };
+}
+
+async function handlePgAdminRecordMutation(body, action) {
+  const moduleName = String(body.module || "").trim();
+  const id = String(body.id || "").trim();
+  const item = body.item || {};
+  if (!id) return { ok: false, error: "ID is required." };
+  if (action === "delete") {
+    const deleteMap = {
+      product: body.itemKind === "reward" ? ["rewards", "reward_id"] : ["products", "product_id"],
+      event: ["events", "event_id"],
+      task: ["tasks", "task_id"],
+      "promo-assets": ["promotional_assets", "promo_asset_id"],
+      promotion: ["promotion", "promo_id"],
+      official: ["templates", "template_id"],
+      community: ["templates", "template_id"],
+      users: ["users", "user_id"],
+      "device-info": ["device_info", "id"],
+    };
+    const target = deleteMap[moduleName];
+    if (!target) return { ok: false, error: `Delete is not implemented for ${moduleName}.` };
+    if (moduleName === "official" || moduleName === "community") {
+      await pgPool.query("UPDATE templates SET status='deleted', visibility='private', updated_at=CURRENT_TIMESTAMP WHERE template_id=$1", [id]);
+    } else {
+      await pgPool.query(`DELETE FROM ${target[0]} WHERE ${target[1]}=$1`, [id]);
+    }
+    const models = await handlePgAdminModels();
+    return { ok: true, id, rows: models.models[moduleName]?.rows || [] };
+  }
+  if (moduleName === "product") {
+    const importResult = await handlePgAdminImportProduct({ item: { ...item, id }, source: "single" }, body.itemKind === "reward" ? "reward" : "product");
+    const models = await handlePgAdminModels();
+    return { ok: importResult.ok, id, rows: models.models.product?.rows || [], error: importResult.error };
+  }
+  if (moduleName === "promotion") {
+    await handlePgAdminCreateRecord({ module: "promotion", item: { ...item, promo_id: id } });
+  } else if (moduleName === "event") {
+    await pgPool.query(
+      "UPDATE events SET event_type=COALESCE(NULLIF($1, ''), event_type), event_name=COALESCE(NULLIF($2, ''), event_name), event_title=$3, event_content=$4, html_url=$5, start_at=$6, expires_at=$7, status=COALESCE(NULLIF($8, ''), status), sort_order=$9 WHERE event_id=$10",
+      [cleanPgText(item.event_type), cleanPgText(item.event_name || item.name), cleanPgText(item.event_title || item.title), cleanPgText(item.event_content || item.content), cleanPgText(item.html_url), cleanPgText(item.start_at || item.start_date), cleanPgText(item.expires_at || item.expire_date), cleanPgText(item.status), pgInteger(item.sort_order), id],
+    );
+  } else if (moduleName === "task") {
+    await pgPool.query(
+      "UPDATE tasks SET task_type=COALESCE(NULLIF($1, ''), task_type), task_name=COALESCE(NULLIF($2, ''), task_name), task_title=$3, task_content=$4, submission_type=COALESCE(NULLIF($5, ''), submission_type), allowed_platforms=$6, reward_points=$7, start_at=$8, expires_at=$9, status=COALESCE(NULLIF($10, ''), status) WHERE task_id=$11",
+      [cleanPgText(item.task_type), cleanPgText(item.task_name || item.name), cleanPgText(item.task_title || item.title), cleanPgText(item.task_content || item.content), cleanPgText(item.submission_type), cleanPgText(item.allowed_platforms), pgInteger(item.reward_points), cleanPgText(item.start_at || item.start_date), cleanPgText(item.expires_at || item.expire_date), cleanPgText(item.status), id],
+    );
+  } else if (moduleName === "promo-assets") {
+    await pgPool.query("UPDATE promotional_assets SET image_url=$1, image_base64=$2 WHERE promo_asset_id=$3", [cleanPgText(item.image_url), pgDataUrlOrBase64(item.image_base64), id]);
+  } else if (moduleName === "official" || moduleName === "community") {
+    await pgPool.query(
+      "UPDATE templates SET template_name=COALESCE(NULLIF($1, ''), template_name), template_title=$2, description=$3, design_type=COALESCE(NULLIF($4, ''), design_type), nail_shape=$5, material_type=$6, status=COALESCE(NULLIF($7, ''), status), updated_at=CURRENT_TIMESTAMP WHERE template_id=$8",
+      [cleanPgText(item.template_name || item.name), cleanPgText(item.template_title || item.title), cleanPgText(item.description || item.info), cleanPgText(item.design_type), cleanPgText(item.nail_shape), cleanPgText(item.material_type), cleanPgText(item.status), id],
+    );
+  } else if (moduleName === "device-info") {
+    await pgPool.query("UPDATE device_info SET equip_id=COALESCE(NULLIF($1, ''), equip_id), type=COALESCE(NULLIF($2, ''), type), address=$3, status=COALESCE(NULLIF($4, ''), status), updated_at=CURRENT_TIMESTAMP WHERE id=$5", [cleanPgText(item.equip_id), cleanPgText(item.type), cleanPgText(item.address), cleanPgText(item.status), id]);
+  } else {
+    return { ok: false, error: `Update is not implemented for ${moduleName}.` };
+  }
+  const models = await handlePgAdminModels();
+  return { ok: true, id, rows: models.models[moduleName]?.rows || [] };
 }
 
 async function handleUserSession(req, res) {
@@ -1654,6 +2212,11 @@ async function handleUserPromos(req, res) {
 async function handleUserUpdateContact(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserUpdateContact(body);
+      sendJson(res, result.ok === false ? 400 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "user_persistence.py"), {
       action: "update_contact",
       sessionId: body.sessionId,
@@ -1837,6 +2400,11 @@ async function handleAdminImportProduct(req, res) {
     return;
   }
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgAdminImportProduct(body, itemType);
+      sendJson(res, result.ok === false ? 400 : 200, result);
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "admin_product_import.py"), { ...body, itemType });
     sendJson(res, 200, result);
   } catch (error) {
@@ -1857,6 +2425,11 @@ async function handleAdminTaxonomy(req, res) {
         ? "update"
         : "delete";
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgAdminTaxonomy(req, body, action);
+      sendJson(res, result.ok === false ? 400 : 200, result);
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "admin_taxonomy.py"), { ...body, action });
     sendJson(res, 200, result);
   } catch (error) {
@@ -1916,6 +2489,11 @@ async function handleAdminProductImage(req, res, url) {
 async function handleAdminCreateRecord(req, res) {
   const body = await readJson(req);
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgAdminCreateRecord(body);
+      sendJson(res, result.ok === false ? 400 : 200, result);
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "admin_record_create.py"), body);
     sendJson(res, 200, result);
   } catch (error) {
@@ -1927,6 +2505,11 @@ async function handleAdminRecordMutation(req, res) {
   const body = await readJson(req);
   const action = req.method === "DELETE" ? "delete" : "update";
   try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgAdminRecordMutation(body, action);
+      sendJson(res, result.ok === false ? 400 : 200, result);
+      return;
+    }
     const result = await runPythonJsonScript(path.join(root, "database", "admin_record_manage.py"), { ...body, action });
     sendJson(res, 200, result);
   } catch (error) {
