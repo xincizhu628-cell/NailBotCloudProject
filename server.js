@@ -40,8 +40,10 @@ const mimeTypes = {
 };
 
 const server = http.createServer(async (req, res) => {
+  let url = null;
   try {
-    const url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+    url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+    res.errorContext = requestErrorContext(req, url);
     /*
     if (req.method === "POST" && url.pathname === "/api/admin/login") {
       await handleAdminLogin(req, res);
@@ -212,7 +214,11 @@ const server = http.createServer(async (req, res) => {
     }
     serveStatic(url.pathname, res, req.method === "HEAD");
   } catch (error) {
-    sendJson(res, error.statusCode || 500, { error: error.message || "Server error" });
+    sendError(res, error.statusCode || 500, error, {
+      program: "server.js",
+      module: "http-router",
+      operation: url ? `${req.method} ${url.pathname}` : `${req.method} ${req.url || "/"}`,
+    });
   }
 });
 
@@ -3499,6 +3505,91 @@ function networkErrorMessage(error) {
   return code ? `${message} (${code})` : message;
 }
 
+function requestErrorContext(req, url) {
+  const pathName = url?.pathname || req?.url || "/";
+  const method = req?.method || "REQUEST";
+  const parts = pathName.split("/").filter(Boolean);
+  let module = parts[1] || parts[0] || "static";
+  if (parts[0] === "api") module = parts[1] || "api";
+  return {
+    program: "server.js",
+    module,
+    operation: `${method} ${pathName}`,
+    path: pathName,
+  };
+}
+
+function errorDiagnostic(error, status, context = {}) {
+  const requestId = crypto.randomUUID();
+  const message = networkErrorMessage(error) || "Server error";
+  const diagnostic = {
+    requestId,
+    program: context.program || "server.js",
+    module: context.module || "unknown",
+    operation: context.operation || "unknown operation",
+    status,
+    error: message,
+  };
+  const code = error?.code || error?.cause?.code;
+  if (code) diagnostic.code = code;
+  if (error?.severity) diagnostic.severity = error.severity;
+  if (error?.table) diagnostic.table = error.table;
+  if (error?.column) diagnostic.column = error.column;
+  if (error?.constraint) diagnostic.constraint = error.constraint;
+  if (error?.detail) diagnostic.detail = error.detail;
+  if (error?.hint) diagnostic.hint = error.hint;
+  return diagnostic;
+}
+
+function logErrorDiagnostic(diagnostic, payload = {}) {
+  const base = `[${diagnostic.requestId}] ${diagnostic.program} ${diagnostic.operation} -> ${diagnostic.status}: ${diagnostic.error}`;
+  const details = {
+    module: diagnostic.module,
+    code: diagnostic.code,
+    table: diagnostic.table,
+    column: diagnostic.column,
+    constraint: diagnostic.constraint,
+    detail: diagnostic.detail,
+    hint: diagnostic.hint,
+    payloadError: payload?.error,
+    payloadReason: payload?.reason,
+  };
+  console.error(base, details);
+}
+
+function normalizeErrorPayload(res, status, payload) {
+  if (!payload || typeof payload !== "object") return payload;
+  const shouldDiagnose = status >= 400 || payload.ok === false;
+  if (!shouldDiagnose || payload.diagnostic) return payload;
+  const context = res?.errorContext || {};
+  const message = payload.error || payload.reason || payload.message || `Request failed with status ${status}`;
+  const error = new Error(String(message));
+  if (payload.code) error.code = payload.code;
+  if (payload.errorDetails && typeof payload.errorDetails === "object") {
+    error.code = error.code || payload.errorDetails.code;
+    error.detail = payload.errorDetails.detail || payload.errorDetails.message;
+  }
+  const diagnostic = errorDiagnostic(error, status, context);
+  logErrorDiagnostic(diagnostic, payload);
+  return {
+    ok: payload.ok === undefined ? false : payload.ok,
+    ...payload,
+    error: payload.error || diagnostic.error,
+    diagnostic,
+  };
+}
+
+function sendError(res, status, error, context = {}, extra = {}, headers = {}) {
+  const diagnostic = errorDiagnostic(error, status, { ...(res?.errorContext || {}), ...context });
+  logErrorDiagnostic(diagnostic, extra);
+  sendJson(res, status, {
+    ok: false,
+    error: diagnostic.error,
+    ...extra,
+    diagnostic,
+  }, headers);
+}
+
 function escapePowerShellPath(filePath) {
   return filePath.replace(/'/g, "''");
 }
@@ -3785,8 +3876,9 @@ function runPythonJsonScript(scriptPath, payload) {
 }
 
 function sendJson(res, status, payload, headers = {}) {
+  const body = normalizeErrorPayload(res, status, payload);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", ...headers });
-  res.end(JSON.stringify(payload));
+  res.end(JSON.stringify(body));
 }
 
 function loadEnvFile(filePath) {
