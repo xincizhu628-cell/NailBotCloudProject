@@ -634,6 +634,15 @@ function hasPostgresRuntime() {
   return Boolean(pgPool);
 }
 
+function requirePostgresRuntime(operation) {
+  if (hasPostgresRuntime()) return;
+  const error = new Error(`${operation} requires DATABASE_URL on the deployed server.`);
+  error.code = "MISSING_DATABASE_URL";
+  error.program = "postgres";
+  error.operation = operation;
+  throw error;
+}
+
 function makeGuestId() {
   return `guest_${crypto.randomUUID().replace(/-/g, "")}`;
 }
@@ -2807,22 +2816,18 @@ async function loadPgArticles() {
 
 async function handleGalleryTaxonomy(req, res) {
   try {
-    if (hasPostgresRuntime()) {
-      const taxonomy = await loadPgTaxonomy();
-      sendJson(res, 200, {
-        ok: true,
-        data: {
-          official_galleries: taxonomy.official_galleries,
-          community_galleries: taxonomy.community_galleries,
-          shapes: taxonomy.shapes,
-          styles: taxonomy.styles,
-          materials: taxonomy.materials,
-        },
-      }, { "Cache-Control": "no-store" });
-      return;
-    }
-    const result = await runPythonJsonScript(path.join(root, "database", "gallery_taxonomy.py"), {});
-    sendJson(res, 200, result, { "Cache-Control": "no-store" });
+    requirePostgresRuntime("load gallery taxonomy");
+    const taxonomy = await loadPgTaxonomy();
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        official_galleries: taxonomy.official_galleries,
+        community_galleries: taxonomy.community_galleries,
+        shapes: taxonomy.shapes,
+        styles: taxonomy.styles,
+        materials: taxonomy.materials,
+      },
+    }, { "Cache-Control": "no-store" });
   } catch (error) {
     sendJson(res, 500, { error: error.message || "Failed to load gallery taxonomy data." }, { "Cache-Control": "no-store" });
   }
@@ -2830,30 +2835,26 @@ async function handleGalleryTaxonomy(req, res) {
 
 async function handlePublicCatalog(req, res) {
   try {
-    if (hasPostgresRuntime()) {
-      const [taxonomy, templates, materialBases, products, events, community] = await Promise.all([
-        loadPgTaxonomy(),
-        loadPgTemplates(),
-        loadPgMaterialBases(),
-        loadPgProducts(),
-        loadPgEvents(),
-        loadPgArticles(),
-      ]);
-      sendJson(res, 200, {
-        ok: true,
-        data: {
-          taxonomy,
-          templates,
-          material_bases: materialBases,
-          products,
-          events,
-          community,
-        },
-      }, { "Cache-Control": "no-store" });
-      return;
-    }
-    const result = await runPythonJsonScript(path.join(root, "database", "public_catalog.py"), {});
-    sendJson(res, 200, result, { "Cache-Control": "no-store" });
+    requirePostgresRuntime("load public catalog");
+    const [taxonomy, templates, materialBases, products, events, community] = await Promise.all([
+      loadPgTaxonomy(),
+      loadPgTemplates(),
+      loadPgMaterialBases(),
+      loadPgProducts(),
+      loadPgEvents(),
+      loadPgArticles(),
+    ]);
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        taxonomy,
+        templates,
+        material_bases: materialBases,
+        products,
+        events,
+        community,
+      },
+    }, { "Cache-Control": "no-store" });
   } catch (error) {
     sendJson(res, 500, { error: error.message || "Failed to load public catalog data." }, { "Cache-Control": "no-store" });
   }

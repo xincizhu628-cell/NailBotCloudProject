@@ -4079,33 +4079,31 @@ select {
 
 .material-m123,
 .material-m124 {
-  background: url("assets/materials/material-123.png") center 30% / 210% auto no-repeat, #f6f4ef;
+  background: linear-gradient(145deg, #ffffff, #ecebe6 58%, #f9f8f5);
 }
 
 .material-m125 {
-  background: url("assets/materials/material-125-gilded.png") 47% 40% / 250% auto no-repeat, #d79a72;
+  background: linear-gradient(145deg, #fff0c5, #d79a72 58%, #f8dca6);
 }
 
 .material-m126 {
-  background: url("assets/materials/material-126-rhinestone.png") 50% 42% / 230% auto no-repeat, #d79a72;
+  background: radial-gradient(circle at 36% 28%, #fff 0 5px, transparent 8px), linear-gradient(145deg, #f7c4ae, #d79a72 62%, #ffe6d8);
 }
 
 .material-m127 {
-  background: url("assets/materials/material-127-cateye.png") 48% 40% / 230% auto no-repeat, #d4a1a0;
+  background: linear-gradient(105deg, #d4a1a0, #fff0ef 48%, #bd7f84);
 }
 
 .material-m128 {
-  background: url("assets/materials/material-128-gilded.png") 47% 40% / 230% auto no-repeat, #c99170;
+  background: linear-gradient(145deg, #f5c08f, #c99170 58%, #ffe0ad);
 }
 
 .material-m130 {
-  background: url("assets/materials/material-130-rhinestone-cateye.png") 48% 38% / 230% auto no-repeat, #d1a09b;
+  background: radial-gradient(circle at 58% 34%, #fff 0 5px, transparent 8px), linear-gradient(105deg, #d1a09b, #fff1ef 48%, #ba7a82);
 }
 
 .material-m124 {
-  background-image: url("assets/materials/material-124-cateye.png");
-  background-position: 48% 40%;
-  background-size: 220% auto;
+  background: linear-gradient(105deg, #d8d1bd, #fff9dc 48%, #9f9a80);
 }
 
 .material-m124::before,
@@ -4136,37 +4134,37 @@ select {
 }
 
 .material-m123::before {
-  background: url("assets/materials/single-m123.png") center / contain no-repeat;
+  background: none;
   mix-blend-mode: normal;
 }
 
 .material-m124::before {
-  background: url("assets/materials/single-m124.png") center / contain no-repeat;
+  background: none;
   mix-blend-mode: normal;
 }
 
 .material-m125::before {
-  background: url("assets/materials/single-m125.png") center / contain no-repeat;
+  background: none;
   mix-blend-mode: normal;
 }
 
 .material-m126::before {
-  background: url("assets/materials/single-m126.png") center / contain no-repeat;
+  background: none;
   mix-blend-mode: normal;
 }
 
 .material-m127::before {
-  background: url("assets/materials/single-m127.png") center / contain no-repeat;
+  background: none;
   mix-blend-mode: normal;
 }
 
 .material-m128::before {
-  background: url("assets/materials/single-m128.png") center / contain no-repeat;
+  background: none;
   mix-blend-mode: normal;
 }
 
 .material-m130::before {
-  background: url("assets/materials/single-m130.png") center / contain no-repeat;
+  background: none;
   mix-blend-mode: normal;
 }
 

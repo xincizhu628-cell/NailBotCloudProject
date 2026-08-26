@@ -704,7 +704,16 @@ const shapeKeys = {
   "short-almond": "shapeShortAlmond",
 };
 const fingers = ["thumb", "index", "middle", "ring", "pinky"];
-const fittedMaterialUrl = (material, shape) => `url("assets/materials/fitted/${material}-${shape}.png")`;
+const fallbackMaterialBackgrounds = {
+  m123: "linear-gradient(145deg, #ffffff 0%, #efeee9 56%, #fbfaf8 100%)",
+  m124: "radial-gradient(circle at 36% 22%, rgba(255,255,255,.82), transparent 24%), linear-gradient(135deg, #f7f0d1 0%, #aaa37d 54%, #fff9df 100%)",
+  m125: "radial-gradient(circle at 42% 18%, rgba(255,255,255,.7), transparent 18%), linear-gradient(165deg, #fff0d7 0%, #e89a83 48%, #f6d7a2 100%)",
+  m126: "radial-gradient(circle at 38% 28%, rgba(255,255,255,.75), transparent 18%), radial-gradient(circle at 58% 42%, rgba(255,236,184,.75), transparent 9%), linear-gradient(150deg, #ffe8d5 0%, #c88981 58%, #fff7eb 100%)",
+  m127: "radial-gradient(circle at 48% 24%, rgba(255,255,255,.75), transparent 18%), linear-gradient(155deg, #f6b09f 0%, #d77763 54%, #ffe2d2 100%)",
+  m128: "radial-gradient(circle at 44% 24%, rgba(255,255,255,.76), transparent 18%), linear-gradient(145deg, #ffe4d3 0%, #f0a089 52%, #ffd7bf 100%)",
+  m130: "radial-gradient(circle at 35% 26%, rgba(255,255,255,.78), transparent 18%), radial-gradient(circle at 58% 62%, rgba(222,185,122,.8), transparent 10%), linear-gradient(145deg, #f5d9bd 0%, #bf9077 54%, #fff0dc 100%)",
+};
+const fittedMaterialUrl = (material) => fallbackMaterialBackgrounds[material] || fallbackMaterialBackgrounds.m123;
 const fingerBaseShapes = {
   thumb: "short-oval",
   index: "almond",
@@ -722,12 +731,8 @@ const materialLabelMap = {
   m129: "129 Gilded Cat Eye",
   m130: "130 Rhinestone Cat Eye",
 };
-const generatedMaterialBaseNumbers = ["123", "124", "125", "126", "127", "128", "129", "130"];
-const generatedMaterialBaseVersion = "20260804-ai5";
-const officialMaterialBaseMap = Object.fromEntries(generatedMaterialBaseNumbers.map((materialNumber) => [
-  `m${materialNumber}`,
-  fingers.map((_, fingerIndex) => `assets/materials/generated-nail-cutouts/material-${materialNumber}-finger-${fingerIndex + 1}.png?v=${generatedMaterialBaseVersion}`),
-]));
+const transparentPixel = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+const officialMaterialBaseMap = {};
 const PERSONAL_DESIGNS_KEY = "nailStudioPersonalDesigns";
 const USER_SESSION_KEY = "nailStudioUserSession";
 const AUTO_DRAFT_TEMPLATE_ID = "AUTO-DRAFT-D2-CANVAS";
@@ -2734,11 +2739,13 @@ async function loadPublicCatalog() {
       publicCatalog = payload.data;
       publicCatalogLoaded = true;
       galleryTaxonomy = payload.data.taxonomy || galleryTaxonomy;
+      updateMaterialTileImages();
       renderAll();
       renderDesigner();
     }
   } catch (error) {
     publicCatalogLoaded = true;
+    updateMaterialTileImages();
     renderAll();
     console.warn("Public catalog fallback in use", error);
   }
@@ -3115,13 +3122,18 @@ function normalizeFingerBaseStates(material = null) {
 
 function materialCategoryMatch(template, materialId) {
   if (!template || !materialId) return false;
+  const materialKey = String(materialId).toLowerCase();
+  const materialNumber = materialKey.replace(/^m/, "");
   const materialName = materialLabelMap[materialId] || materialId;
   const values = [
+    template.id,
+    template.template_id,
+    template.name,
     template.material_type,
     template.material_categories,
     ...(Array.isArray(template.category_ids) ? template.category_ids : []),
   ].filter(Boolean).join("|").toLowerCase();
-  return values.includes(String(materialId).toLowerCase()) || values.includes(materialName.toLowerCase());
+  return values.includes(materialKey) || values.includes(materialNumber) || values.includes(materialName.toLowerCase());
 }
 
 function officialMaterialTemplateSet(materialId) {
@@ -3147,15 +3159,34 @@ function templateFingerImageSource(template, finger) {
 }
 
 function materialBaseImageForFinger(materialId, finger) {
+  const template = officialMaterialTemplateSet(materialId)[finger];
+  const templateImage = templateFingerImageSource(template, finger);
+  if (templateImage) return cssImage(templateImage);
   const cachedImages = officialMaterialBaseMap[materialId];
   if (Array.isArray(cachedImages) && cachedImages.length) {
     const fingerIndex = Math.max(0, fingers.indexOf(finger));
     return cssImage(cachedImages[fingerIndex] || cachedImages[0]);
   }
-  const template = officialMaterialTemplateSet(materialId)[finger];
-  const templateImage = templateFingerImageSource(template, finger);
-  if (templateImage) return cssImage(templateImage);
   return fittedMaterialUrl(materialId, fixedShapeForFinger(finger));
+}
+
+function materialPreviewImage(materialId) {
+  const templateSet = officialMaterialTemplateSet(materialId);
+  const firstTemplate = fingers.map((finger) => templateSet[finger]).find(Boolean);
+  const templateImage = templateFingerImageSource(firstTemplate, "thumb");
+  if (templateImage) return templateImage;
+  const cachedImages = officialMaterialBaseMap[materialId];
+  if (Array.isArray(cachedImages) && cachedImages[0]) return cachedImages[0];
+  return transparentPixel;
+}
+
+function updateMaterialTileImages() {
+  $$(".material-tile").forEach((tile) => {
+    const materialId = tile.dataset.material;
+    const img = tile.querySelector("img");
+    if (!img || !materialId) return;
+    img.src = materialPreviewImage(materialId);
+  });
 }
 
 function applyMaterialToAllFingers(materialId) {
