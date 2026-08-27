@@ -81,6 +81,10 @@ const server = http.createServer(async (req, res) => {
       await handleSeedEditTest(req, res);
       return;
     }
+    if (req.method === "GET" && url.pathname === "/api/db-url-diagnostic") {
+      handleDbUrlDiagnostic(req, res);
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/user/session") {
       await handleUserSession(req, res);
       return;
@@ -235,6 +239,78 @@ server.listen(port, "0.0.0.0", () => {
   console.log(`AI image model: ${process.env.HF_IMAGE_MODEL || defaultModel}`);
   console.log(`Ark image model: ${process.env.ARK_IMAGE_MODEL || defaultArkModel}`);
 });
+
+function databaseUrlDiagnostic() {
+  const raw = process.env.DATABASE_URL || "";
+  if (!raw) {
+    return {
+      configured: false,
+      error: "DATABASE_URL is not set.",
+      expectedFormat: "postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres",
+    };
+  }
+  try {
+    const parsed = new URL(raw);
+    const username = decodeURIComponent(parsed.username || "");
+    const hostname = parsed.hostname || "";
+    const pathname = parsed.pathname || "";
+    const isPooler = hostname.includes(".pooler.supabase.com");
+    const isDirect = hostname.startsWith("db.") && hostname.endsWith(".supabase.co");
+    const projectRefFromUser = username.startsWith("postgres.") ? username.slice("postgres.".length) : "";
+    const projectRefFromDirectHost = isDirect ? hostname.replace(/^db\./, "").replace(/\.supabase\.co$/, "") : "";
+    const likelyProblems = [];
+    if (!["postgres:", "postgresql:"].includes(parsed.protocol)) {
+      likelyProblems.push("Protocol should be postgres:// or postgresql://.");
+    }
+    if (raw.includes("\\")) {
+      likelyProblems.push("DATABASE_URL contains backslashes. Remove backslashes.");
+    }
+    if (hostname.includes("[") || hostname.includes("]")) {
+      likelyProblems.push("Host still contains a placeholder like [REGION].");
+    }
+    if (isPooler && !hostname.startsWith("aws-0-")) {
+      likelyProblems.push("Supabase pooler host usually starts with aws-0-. This host may be missing the 0- segment.");
+    }
+    if (isPooler && !username.startsWith("postgres.")) {
+      likelyProblems.push("Pooler username should look like postgres.<project-ref>.");
+    }
+    if (isDirect && username !== "postgres") {
+      likelyProblems.push("Direct connection username should usually be postgres.");
+    }
+    if (!isPooler && !isDirect) {
+      likelyProblems.push("Host does not look like a Supabase pooler or direct database host.");
+    }
+    return {
+      configured: true,
+      rawPreview: raw.replace(/:([^:@/]+)@/, ":***@"),
+      protocol: parsed.protocol,
+      username,
+      passwordPresent: Boolean(parsed.password),
+      hostname,
+      port: parsed.port || "(default)",
+      database: pathname.replace(/^\//, "") || "(none)",
+      connectionKind: isPooler ? "supabase-pooler" : isDirect ? "supabase-direct" : "unknown",
+      projectRef: projectRefFromUser || projectRefFromDirectHost || "(not detected)",
+      query: parsed.search || "",
+      likelyProblems,
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      parseable: false,
+      rawPreview: raw.replace(/:([^:@/]+)@/, ":***@"),
+      error: error.message || "DATABASE_URL could not be parsed.",
+      expectedFormat: "postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres",
+    };
+  }
+}
+
+function handleDbUrlDiagnostic(req, res) {
+  sendJson(res, 200, {
+    ok: true,
+    diagnostic: databaseUrlDiagnostic(),
+  }, { "Cache-Control": "no-store" });
+}
 
 async function handleAiGenerate(req, res) {
   const body = await readJson(req);
