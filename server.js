@@ -13,8 +13,9 @@ const bundledPython = path.join(os.homedir(), ".cache", "codex-runtimes", "codex
 
 const port = Number(process.env.PORT || 4174);
 const squarePaymentService = createSquarePaymentService({ env: process.env });
-const pgPool = process.env.DATABASE_URL ? new Pool({
-  connectionString: process.env.DATABASE_URL,
+const databaseUrl = String(process.env.DATABASE_URL || "").trim();
+const pgPool = databaseUrl ? new Pool({
+  connectionString: databaseUrl,
   ssl: String(process.env.DATABASE_SSL || "true").toLowerCase() === "false" ? false : { rejectUnauthorized: false },
 }) : null;
 const defaultModel = process.env.HF_IMAGE_MODEL || "black-forest-labs/FLUX.1-schnell";
@@ -242,7 +243,8 @@ server.listen(port, "0.0.0.0", () => {
 
 function databaseUrlDiagnostic() {
   const raw = process.env.DATABASE_URL || "";
-  if (!raw) {
+  const cleaned = String(raw).trim();
+  if (!cleaned) {
     return {
       configured: false,
       error: "DATABASE_URL is not set.",
@@ -250,7 +252,7 @@ function databaseUrlDiagnostic() {
     };
   }
   try {
-    const parsed = new URL(raw);
+    const parsed = new URL(cleaned);
     const username = decodeURIComponent(parsed.username || "");
     const hostname = parsed.hostname || "";
     const pathname = parsed.pathname || "";
@@ -282,7 +284,8 @@ function databaseUrlDiagnostic() {
     }
     return {
       configured: true,
-      rawPreview: raw.replace(/:([^:@/]+)@/, ":***@"),
+      rawPreview: cleaned.replace(/:([^:@/]+)@/, ":***@"),
+      hadLeadingOrTrailingWhitespace: raw !== cleaned,
       protocol: parsed.protocol,
       username,
       passwordPresent: Boolean(parsed.password),
@@ -298,7 +301,8 @@ function databaseUrlDiagnostic() {
     return {
       configured: true,
       parseable: false,
-      rawPreview: raw.replace(/:([^:@/]+)@/, ":***@"),
+      rawPreview: cleaned.replace(/:([^:@/]+)@/, ":***@"),
+      hadLeadingOrTrailingWhitespace: raw !== cleaned,
       error: error.message || "DATABASE_URL could not be parsed.",
       expectedFormat: "postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres",
     };
