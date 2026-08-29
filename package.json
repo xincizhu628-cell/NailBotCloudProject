@@ -15,6 +15,7 @@
     "migrate:schema": "node tools/apply_postgres_schema.js",
     "migrate:postgres": "node tools/import_csv_to_postgres.js",
     "migrate:assets": "node tools/upload_assets_to_r2.js",
-    "migrate:asset-urls": "node tools/backfill_asset_urls.js"
+    "migrate:asset-urls": "node tools/backfill_asset_urls.js",
+    "sync:material-cutouts": "node tools/sync_material_cutouts_to_cloud.js"
   }
 }
