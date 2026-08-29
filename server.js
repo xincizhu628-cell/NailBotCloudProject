@@ -5,6 +5,7 @@ const { spawn } = require("child_process");
 const os = require("os");
 const crypto = require("crypto");
 const { Pool } = require("pg");
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { createSquarePaymentService } = require("./services/squarePaymentService");
 
 const root = path.resolve(__dirname || process.cwd());
@@ -1829,9 +1830,11 @@ async function handlePgAdminModels() {
     id: item.product_id,
     name: item.product_name,
     type: item.product_type,
-    image: item.image_url,
+    image: item.image_url || (item.image_base64 ? "[base64 image]" : ""),
     image_url: item.image_url,
-    image_preview_url: item.image_url,
+    image_base64: "",
+    image_preview_url: item.image_url || (item.image_base64 ? `/api/admin/product-image?itemKind=product&id=${encodeURIComponent(item.product_id)}` : ""),
+    has_image_base64: Boolean(item.image_base64),
     info: item.product_info,
     nail_shape: item.nail_shape,
     style_tags: item.style_tags,
@@ -1852,10 +1855,11 @@ async function handlePgAdminModels() {
     id: item.reward_id,
     name: item.reward_name,
     type: item.reward_type,
-    image: item.image_url || item.image_base64,
+    image: item.image_url || (item.image_base64 ? "[base64 image]" : ""),
     image_url: item.image_url,
-    image_base64: item.image_base64,
-    image_preview_url: item.image_url || item.image_base64,
+    image_base64: "",
+    image_preview_url: item.image_url || (item.image_base64 ? `/api/admin/product-image?itemKind=reward&id=${encodeURIComponent(item.reward_id)}` : ""),
+    has_image_base64: Boolean(item.image_base64),
     info: item.reward_info,
     nail_shape: "",
     style_tags: "",
@@ -2151,6 +2155,7 @@ async function handlePgAdminImportProduct(body, itemType) {
   const boundDeviceId = await validatePgBoundDevice(item.bound_device_id);
   if (itemType === "reward") {
     const rewardId = cleanPgText(item.reward_id || item.id, `reward_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`);
+    const imageAsset = await resolvePgProductImageInput("rewards", "reward_id", rewardId, item, "reward-products");
     await pgPool.query(
       `
       INSERT INTO rewards (
@@ -2181,8 +2186,8 @@ async function handlePgAdminImportProduct(body, itemType) {
         cleanPgText(item.reward_type || item.type, "coupon"),
         pgInteger(item.unit_point_cost || item.price_or_points),
         cleanPgText(item.reward_info || item.info),
-        cleanPgText(item.image_url),
-        pgDataUrlOrBase64(item.image_base64),
+        imageAsset.imageUrl,
+        imageAsset.imageBase64,
         boundDeviceId,
         cleanPgText(item.pickup_method, "pickup"),
         pgFlag(item.is_featured),
@@ -2197,6 +2202,7 @@ async function handlePgAdminImportProduct(body, itemType) {
     return { ok: true, imported: 1, itemType: "reward", ids: [rewardId], models: await handlePgAdminModels() };
   }
   const productId = cleanPgText(item.product_id || item.id, `product_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`);
+  const imageAsset = await resolvePgProductImageInput("products", "product_id", productId, item, "products");
   await pgPool.query(
     `
     INSERT INTO products (
@@ -2231,8 +2237,8 @@ async function handlePgAdminImportProduct(body, itemType) {
       cleanPgText(item.product_name || item.name, productId),
       pgNumber(item.unit_price || item.price_or_points),
       cleanPgText(item.product_info || item.info),
-      cleanPgText(item.image_url),
-      pgDataUrlOrBase64(item.image_base64),
+      imageAsset.imageUrl,
+      imageAsset.imageBase64,
       cleanPgText(item.style_tags),
       cleanPgText(item.nail_shape),
       boundDeviceId,
@@ -2985,6 +2991,8 @@ async function safePgRows(query, params = []) {
 
 async function ensurePgAdminRuntimeSchema() {
   if (!hasPostgresRuntime() || pgAdminRuntimeSchemaReady) return;
+  await pgPool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS sha256 TEXT");
+  await pgPool.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_sha256 ON assets(sha256) WHERE sha256 IS NOT NULL AND sha256 <> ''");
   await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
   await pgPool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
   await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS print_code TEXT");
@@ -3014,6 +3022,120 @@ async function ensurePgAdminRuntimeSchema() {
     END $$;
   `);
   pgAdminRuntimeSchemaReady = true;
+}
+
+function parseImageDataUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const match = text.match(/^data:([^;,]+);base64,(.+)$/);
+  const mimeType = match ? match[1] : "image/png";
+  const encoded = match ? match[2] : text;
+  const buffer = Buffer.from(encoded, "base64");
+  if (!buffer.length) return null;
+  const extension = mimeType.includes("jpeg") || mimeType.includes("jpg")
+    ? "jpg"
+    : mimeType.includes("webp")
+      ? "webp"
+      : mimeType.includes("gif")
+        ? "gif"
+        : "png";
+  return {
+    mimeType,
+    encoded,
+    dataUrl: `data:${mimeType};base64,${encoded}`,
+    buffer,
+    sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
+    extension,
+  };
+}
+
+function r2UploadConfig() {
+  const endpoint = process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : "");
+  const bucket = process.env.R2_BUCKET || "";
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID || "";
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || "";
+  const publicBaseUrl = String(process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey || !publicBaseUrl) return null;
+  return { endpoint, bucket, accessKeyId, secretAccessKey, publicBaseUrl };
+}
+
+async function uploadBufferToR2(buffer, key, contentType) {
+  const config = r2UploadConfig();
+  if (!config) return "";
+  const client = new S3Client({
+    region: "auto",
+    endpoint: config.endpoint,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
+  await client.send(new PutObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+  }));
+  return `${config.publicBaseUrl}/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+async function resolvePgUploadedImageAsset(imageBase64, imageUrl, assetType = "product-image") {
+  const existingUrl = cleanPgText(imageUrl);
+  const parsed = parseImageDataUrl(imageBase64);
+  if (!parsed) {
+    return { imageUrl: existingUrl, imageBase64: "", assetId: "" };
+  }
+  await ensurePgAdminRuntimeSchema();
+  const existing = (await pgPool.query(
+    "SELECT asset_id, url, base64_data FROM assets WHERE sha256=$1 LIMIT 1",
+    [parsed.sha256],
+  )).rows[0];
+  if (existing?.url) {
+    return { imageUrl: existing.url, imageBase64: "", assetId: existing.asset_id };
+  }
+
+  const assetId = existing?.asset_id || `asset_${assetType}_${parsed.sha256.slice(0, 18)}`;
+  let publicUrl = "";
+  try {
+    publicUrl = await uploadBufferToR2(parsed.buffer, `${assetType}/${parsed.sha256}.${parsed.extension}`, parsed.mimeType);
+  } catch (error) {
+    console.warn(`[asset-upload] ${assetType} R2 upload failed: ${error.message || error}`);
+  }
+
+  await pgPool.query(
+    `
+    INSERT INTO assets (asset_id, asset_type, mime_type, url, base64_data, sha256)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (asset_id) DO UPDATE SET
+      mime_type=EXCLUDED.mime_type,
+      url=COALESCE(NULLIF(EXCLUDED.url, ''), assets.url),
+      base64_data=CASE WHEN NULLIF(EXCLUDED.url, '') IS NULL THEN EXCLUDED.base64_data ELSE '' END,
+      sha256=EXCLUDED.sha256
+    `,
+    [assetId, assetType, parsed.mimeType, publicUrl, publicUrl ? "" : parsed.dataUrl, parsed.sha256],
+  );
+
+  return {
+    imageUrl: publicUrl || "",
+    imageBase64: publicUrl ? "" : parsed.dataUrl,
+    assetId,
+  };
+}
+
+async function resolvePgProductImageInput(table, idColumn, id, item, assetType) {
+  const parsed = parseImageDataUrl(item.image_base64);
+  if (parsed) return resolvePgUploadedImageAsset(item.image_base64, item.image_url, assetType);
+  const explicitUrl = cleanPgText(item.image_url);
+  if (explicitUrl) return { imageUrl: explicitUrl, imageBase64: "", assetId: "" };
+  const existing = (await pgPool.query(
+    `SELECT image_url, image_base64 FROM ${table} WHERE ${idColumn}=$1`,
+    [id],
+  )).rows[0];
+  return {
+    imageUrl: existing?.image_url || "",
+    imageBase64: existing?.image_base64 || "",
+    assetId: "",
+  };
 }
 
 async function validatePgBoundDevice(value) {
@@ -3268,6 +3390,7 @@ async function loadPgProducts() {
       p.style_tags,
       p.nail_shape,
       p.bound_device_id,
+      p.image_base64,
       p.stock_quantity,
       p.stock_s,
       p.stock_m,
@@ -3291,7 +3414,7 @@ async function loadPgProducts() {
       : "both";
     return {
       ...item,
-      image_base64: "",
+      image_base64: item.image_base64 || "",
       category_ids: [...new Set(categoryIds)].sort(),
       delivery_mode: pickupMethod,
       supports_pickup: ["pickup", "both"].includes(pickupMethod),

@@ -1,5 +1,5 @@
-﻿import base64
 import base64
+import hashlib
 import io
 import json
 import sqlite3
@@ -20,6 +20,7 @@ PRODUCT_HEADERS = {
     "image_base64": ["image_base64", "imagebase64", "base64"],
     "style_tags": ["style_tags", "styletags", "tags", "标签", "风格标签"],
     "nail_shape": ["nail_shape", "nailshape", "shape", "甲形", "甲型"],
+    "bound_device_id": ["bound_device_id", "bound_device", "device", "device_id", "equip_id", "绑定设备", "绑定设备id", "设备编号"],
     "stock_quantity": ["stock_quantity", "stock", "quantity", "库存", "库存数量"],
     "stock_s": ["stock_s", "stocks", "s_stock", "stock_s_size", "s", "S库存", "S码库存"],
     "stock_m": ["stock_m", "stockm", "m_stock", "stock_m_size", "m", "M库存", "M码库存"],
@@ -39,6 +40,7 @@ REWARD_HEADERS = {
     "reward_info": ["reward_info", "rewardinfo", "description", "detail", "奖励介绍", "奖品介绍", "详情"],
     "image_url": ["image_url", "imageurl", "image", "cover", "cover_url", "picture"],
     "image_base64": ["image_base64", "imagebase64", "base64"],
+    "bound_device_id": ["bound_device_id", "bound_device", "device", "device_id", "equip_id", "绑定设备", "绑定设备id", "设备编号"],
     "on_delivery": ["on_delivery", "delivery", "shipping", "是否邮寄", "需要邮寄"],
     "pickup_method": ["pickup_method", "pickupmethod", "delivery_method", "fulfillment", "取货方式", "支持取货方式", "配送方式", "自取邮寄"],
     "is_featured": ["is_featured", "featured", "精品", "是否精品", "精选", "is_best"],
@@ -127,6 +129,51 @@ def data_url_to_bytes(data_url):
     return base64.b64decode(data_url)
 
 
+def image_payload(value):
+    text = str(value or "").strip()
+    if not text:
+        return None
+    mime_type = "image/png"
+    encoded = text
+    if text.startswith("data:") and "," in text:
+        header, encoded = text.split(",", 1)
+        if ";" in header:
+            mime_type = header[5:].split(";", 1)[0] or mime_type
+    raw = base64.b64decode(encoded)
+    if not raw:
+        return None
+    return {
+        "mime_type": mime_type,
+        "data_url": f"data:{mime_type};base64,{encoded}",
+        "sha256": hashlib.sha256(raw).hexdigest(),
+    }
+
+
+def normalize_image_assets(connection, rows, asset_type):
+    for row in rows:
+        payload = image_payload(row.get("image_base64"))
+        if not payload:
+            continue
+        existing = connection.execute(
+            "SELECT asset_id, url FROM assets WHERE sha256=? LIMIT 1",
+            (payload["sha256"],),
+        ).fetchone()
+        if existing:
+            asset_id, url = existing
+        else:
+            asset_id = f"asset_{asset_type}_{payload['sha256'][:18]}"
+            url = ""
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO assets (asset_id, asset_type, mime_type, url, base64_data, sha256)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (asset_id, asset_type, payload["mime_type"], url, payload["data_url"], payload["sha256"]),
+            )
+        row["image_url"] = url or f"/api/admin/product-image?itemKind=asset&id={asset_id}"
+        row["image_base64"] = ""
+
+
 def rows_from_xlsx(data_url):
     from openpyxl import load_workbook
 
@@ -158,6 +205,7 @@ def product_from_row(row):
         "image_base64": str(pick(row, PRODUCT_HEADERS, "image_base64") or ""),
         "style_tags": str(pick(row, PRODUCT_HEADERS, "style_tags") or ""),
         "nail_shape": str(pick(row, PRODUCT_HEADERS, "nail_shape") or ""),
+        "bound_device_id": str(pick(row, PRODUCT_HEADERS, "bound_device_id") or ""),
         "on_delivery": bool_int(pick(row, PRODUCT_HEADERS, "on_delivery"), 1),
         "pickup_method": pickup_method(pick(row, PRODUCT_HEADERS, "pickup_method"), "both"),
         "is_featured": bool_int(pick(row, PRODUCT_HEADERS, "is_featured"), 0),
@@ -179,6 +227,7 @@ def reward_from_row(row):
         "reward_info": str(pick(row, REWARD_HEADERS, "reward_info") or ""),
         "image_url": str(pick(row, REWARD_HEADERS, "image_url") or ""),
         "image_base64": str(pick(row, REWARD_HEADERS, "image_base64") or ""),
+        "bound_device_id": str(pick(row, REWARD_HEADERS, "bound_device_id") or ""),
         "on_delivery": bool_int(pick(row, REWARD_HEADERS, "on_delivery"), 0),
         "pickup_method": pickup_method(pick(row, REWARD_HEADERS, "pickup_method"), "pickup"),
         "is_featured": bool_int(pick(row, REWARD_HEADERS, "is_featured"), 0),
@@ -193,11 +242,11 @@ def insert_products(connection, rows):
         """
         INSERT OR REPLACE INTO products (
           product_id, product_type, product_name, unit_price, product_info,
-          image_url, image_base64, style_tags, nail_shape, stock_quantity,
+          image_url, image_base64, style_tags, nail_shape, bound_device_id, stock_quantity,
           stock_s, stock_m, stock_l, stock_xl, on_delivery, pickup_method, is_featured, status
         ) VALUES (
           :product_id, :product_type, :product_name, :unit_price, :product_info,
-          :image_url, :image_base64, :style_tags, :nail_shape, :stock_quantity,
+          :image_url, :image_base64, :style_tags, :nail_shape, :bound_device_id, :stock_quantity,
           :stock_s, :stock_m, :stock_l, :stock_xl, :on_delivery, :pickup_method, :is_featured, :status
         )
         """,
@@ -210,11 +259,11 @@ def insert_rewards(connection, rows):
         """
         INSERT OR REPLACE INTO rewards (
           reward_id, reward_name, reward_type, unit_point_cost, reward_info,
-          image_url, image_base64, on_delivery, stock_quantity,
+          image_url, image_base64, bound_device_id, on_delivery, stock_quantity,
           stock_s, stock_m, stock_l, stock_xl, pickup_method, is_featured, status
         ) VALUES (
           :reward_id, :reward_name, :reward_type, :unit_point_cost, :reward_info,
-          :image_url, :image_base64, :on_delivery, :stock_quantity,
+          :image_url, :image_base64, :bound_device_id, :on_delivery, :stock_quantity,
           :stock_s, :stock_m, :stock_l, :stock_xl, :pickup_method, :is_featured, :status
         )
         """,
@@ -222,36 +271,64 @@ def insert_rewards(connection, rows):
     )
 
 
+def validate_bound_devices(connection, rows):
+    requested = sorted({str(row.get("bound_device_id") or "").strip() for row in rows if str(row.get("bound_device_id") or "").strip()})
+    if not requested:
+        return
+    placeholders = ",".join("?" for _ in requested)
+    existing = {
+        str(row[0])
+        for row in connection.execute(
+            f"""
+            SELECT equip_id
+            FROM device_info
+            WHERE equip_id IN ({placeholders})
+              AND type IN ('主机', 'main_unit')
+              AND COALESCE(status, 'active')='active'
+            """,
+            requested,
+        ).fetchall()
+    }
+    if missing := [device for device in requested if device not in existing]:
+        raise ValueError(f"设备不存在无法添加：{', '.join(missing)}")
+
+
 def main():
-    payload = json.loads(sys.stdin.read() or "{}")
-    item_type = payload.get("itemType") or "product"
-    source = payload.get("source") or "single"
-    raw_rows = rows_from_xlsx(payload.get("xlsx")) if source == "xlsx" else [payload.get("item") or payload]
-
-    if not raw_rows:
-        raise ValueError("No product data found.")
-
-    if item_type == "reward":
-        rows = [reward_from_row({normalize_header(k): v for k, v in row.items()}) for row in raw_rows]
-    else:
-        rows = [product_from_row({normalize_header(k): v for k, v in row.items()}) for row in raw_rows]
-
-    connection = sqlite3.connect(DB_PATH)
     try:
-        ensure_admin_schema(connection)
-        insert_rewards(connection, rows) if item_type == "reward" else insert_products(connection, rows)
-        connection.commit()
-    finally:
-        connection.close()
+        payload = json.loads(sys.stdin.read() or "{}")
+        item_type = payload.get("itemType") or "product"
+        source = payload.get("source") or "single"
+        raw_rows = rows_from_xlsx(payload.get("xlsx")) if source == "xlsx" else [payload.get("item") or payload]
 
-    print(json.dumps({
-        "ok": True,
-        "itemType": item_type,
-        "imported": len(rows),
-        "ids": [row.get("reward_id") or row.get("product_id") for row in rows],
-    }, ensure_ascii=False))
+        if not raw_rows:
+            raise ValueError("No product data found.")
+
+        if item_type == "reward":
+            rows = [reward_from_row({normalize_header(k): v for k, v in row.items()}) for row in raw_rows]
+        else:
+            rows = [product_from_row({normalize_header(k): v for k, v in row.items()}) for row in raw_rows]
+
+        connection = sqlite3.connect(DB_PATH)
+        try:
+            ensure_admin_schema(connection)
+            validate_bound_devices(connection, rows)
+            normalize_image_assets(connection, rows, "reward-products" if item_type == "reward" else "products")
+            insert_rewards(connection, rows) if item_type == "reward" else insert_products(connection, rows)
+            connection.commit()
+        finally:
+            connection.close()
+
+        print(json.dumps({
+            "ok": True,
+            "itemType": item_type,
+            "imported": len(rows),
+            "ids": [row.get("reward_id") or row.get("product_id") for row in rows],
+        }, ensure_ascii=False))
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
     main()
+
 

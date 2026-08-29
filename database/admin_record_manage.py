@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import json
 import sqlite3
 import sys
@@ -45,6 +47,71 @@ def clean_product_type(value, default="穿戴甲"):
     if key in {"nail_accessory", "accessory", "accessories"} or text == "配件":
         return "配件"
     return default if not text else text
+
+
+def validate_bound_device(connection, value):
+    device_id = clean_text(value)
+    if not device_id:
+        return ""
+    row = connection.execute(
+        """
+        SELECT equip_id
+        FROM device_info
+        WHERE equip_id=?
+          AND type IN ('主机', 'main_unit')
+          AND COALESCE(status, 'active')='active'
+        """,
+        (device_id,),
+    ).fetchone()
+    if not row:
+        raise ValueError("设备不存在无法添加")
+    return device_id
+
+
+def image_payload(value):
+    text = clean_text(value)
+    if not text:
+        return None
+    mime_type = "image/png"
+    encoded = text
+    if text.startswith("data:") and "," in text:
+        header, encoded = text.split(",", 1)
+        if ";" in header:
+            mime_type = header[5:].split(";", 1)[0] or mime_type
+    raw = base64.b64decode(encoded)
+    if not raw:
+        return None
+    return {
+        "mime_type": mime_type,
+        "data_url": f"data:{mime_type};base64,{encoded}",
+        "sha256": hashlib.sha256(raw).hexdigest(),
+    }
+
+
+def resolve_local_image_asset(connection, image_base64, asset_type):
+    payload = image_payload(image_base64)
+    if not payload:
+        return None
+    existing = connection.execute(
+        "SELECT asset_id, url FROM assets WHERE sha256=? LIMIT 1",
+        (payload["sha256"],),
+    ).fetchone()
+    if existing:
+        asset_id, url = existing
+    else:
+        asset_id = f"asset_{asset_type}_{payload['sha256'][:18]}"
+        url = ""
+        connection.execute(
+            """
+            INSERT OR REPLACE INTO assets (asset_id, asset_type, mime_type, url, base64_data, sha256)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (asset_id, asset_type, payload["mime_type"], url, payload["data_url"], payload["sha256"]),
+        )
+    return {
+        "image_url": url or f"/api/admin/product-image?itemKind=asset&id={asset_id}",
+        "image_base64": "",
+    }
 
 
 def stock_values(item):
@@ -210,11 +277,15 @@ def update_record(connection, module, row_id, item, item_kind=""):
                 "image_url": clean_text(item.get("image_url")),
                 "image_base64": clean_text(item.get("image_base64")),
                 "reward_info": clean_text(item.get("reward_info")),
+                "bound_device_id": validate_bound_device(connection, item.get("bound_device_id")),
                 "pickup_method": clean_pickup_method(item.get("pickup_method"), "pickup"),
                 "is_featured": clean_int(item.get("is_featured"), 0),
                 "status": clean_text(item.get("status")) or "active",
             }
             values.update(stock_values(item))
+            resolved_image = resolve_local_image_asset(connection, values["image_base64"], "reward-products")
+            if resolved_image:
+                values.update(resolved_image)
             if not values["image_base64"]:
                 values.pop("image_base64")
             update_row(connection, "rewards", "reward_id", row_id, values)
@@ -228,11 +299,15 @@ def update_record(connection, module, row_id, item, item_kind=""):
                 "image_url": clean_text(item.get("image_url")),
                 "image_base64": clean_text(item.get("image_base64")),
                 "product_info": clean_text(item.get("product_info")),
+                "bound_device_id": validate_bound_device(connection, item.get("bound_device_id")),
                 "pickup_method": clean_pickup_method(item.get("pickup_method"), "both"),
                 "is_featured": clean_int(item.get("is_featured"), 0),
                 "status": clean_text(item.get("status")) or "active",
             }
             values.update(stock_values(item))
+            resolved_image = resolve_local_image_asset(connection, values["image_base64"], "products")
+            if resolved_image:
+                values.update(resolved_image)
             if not values["image_base64"]:
                 values.pop("image_base64")
             update_row(connection, "products", "product_id", row_id, values)
@@ -413,4 +488,3 @@ if __name__ == "__main__":
         main()
     except Exception as error:
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
-        sys.exit(1)

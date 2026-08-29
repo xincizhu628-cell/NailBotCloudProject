@@ -1,4 +1,7 @@
-PRAGMA foreign_keys = ON;
+-- NailBot PostgreSQL/Supabase first-pass schema.
+-- Generated from database/schema.sql.
+-- This import schema omits foreign keys on purpose. Create strict foreign keys
+-- after data import once SQLite/Postgres type differences are cleaned up.
 
 CREATE TABLE IF NOT EXISTS users (
   user_id TEXT PRIMARY KEY,
@@ -14,19 +17,18 @@ CREATE TABLE IF NOT EXISTS users (
   gender TEXT,
   avatar_asset_id TEXT,
   default_address_id TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now(),
   last_seen_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS user_auth_sessions (
   session_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
-  login_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  login_at TEXT NOT NULL DEFAULT now(),
   login_date TEXT NOT NULL,
-  last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  status TEXT NOT NULL DEFAULT 'active',
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  last_seen_at TEXT NOT NULL DEFAULT now(),
+  status TEXT NOT NULL DEFAULT 'active'
 );
 
 CREATE TABLE IF NOT EXISTS auth_verification_codes (
@@ -38,7 +40,7 @@ CREATE TABLE IF NOT EXISTS auth_verification_codes (
   code_salt TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   consumed_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS admin_users (
@@ -49,17 +51,16 @@ CREATE TABLE IF NOT EXISTS admin_users (
   role TEXT NOT NULL DEFAULT 'admin',
   status TEXT NOT NULL DEFAULT 'active',
   last_login_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS admin_sessions (
   session_id TEXT PRIMARY KEY,
   admin_id TEXT NOT NULL,
   expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (admin_id) REFERENCES admin_users(admin_id)
+  created_at TEXT NOT NULL DEFAULT now(),
+  last_seen_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS addresses (
@@ -74,8 +75,7 @@ CREATE TABLE IF NOT EXISTS addresses (
   postcode TEXT,
   delivery_note TEXT,
   is_default INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS third_party_accounts (
@@ -85,8 +85,7 @@ CREATE TABLE IF NOT EXISTS third_party_accounts (
   platform_user_id TEXT,
   username TEXT,
   access_status TEXT NOT NULL DEFAULT 'linked',
-  linked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  linked_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS members (
@@ -96,8 +95,7 @@ CREATE TABLE IF NOT EXISTS members (
   level INTEGER NOT NULL DEFAULT 1,
   title TEXT,
   points_balance INTEGER NOT NULL DEFAULT 0,
-  joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  joined_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS achievements (
@@ -109,19 +107,17 @@ CREATE TABLE IF NOT EXISTS achievements (
   condition_type TEXT,
   condition_value TEXT,
   description TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS member_achievements (
   member_achievement_id TEXT PRIMARY KEY,
   member_id TEXT NOT NULL,
   achievement_id TEXT NOT NULL,
-  gained_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  gained_at TEXT NOT NULL DEFAULT now(),
   is_rewarded INTEGER NOT NULL DEFAULT 0,
   rewarded_at TEXT,
-  UNIQUE(member_id, achievement_id),
-  FOREIGN KEY (member_id) REFERENCES members(member_id),
-  FOREIGN KEY (achievement_id) REFERENCES achievements(achievement_id)
+  UNIQUE(member_id, achievement_id)
 );
 
 CREATE TABLE IF NOT EXISTS assets (
@@ -134,20 +130,19 @@ CREATE TABLE IF NOT EXISTS assets (
   sha256 TEXT UNIQUE,
   width INTEGER,
   height INTEGER,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (owner_user_id) REFERENCES users(user_id)
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS promotional_assets (
-  promo_asset_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  promo_asset_id BIGSERIAL PRIMARY KEY,
   image_url TEXT,
   image_base64 TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_sha256
 ON assets(sha256)
-WHERE sha256 IS NOT NULL AND sha256 != '';
+WHERE sha256 IS NOT NULL AND sha256 <> '';
 
 CREATE TABLE IF NOT EXISTS articles (
   article_id TEXT PRIMARY KEY,
@@ -158,65 +153,63 @@ CREATE TABLE IF NOT EXISTS articles (
   related_topics TEXT,
   status TEXT NOT NULL DEFAULT 'published',
   heat_count INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (author_user_id) REFERENCES users(user_id)
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS styles (
-  style_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  style_id BIGSERIAL PRIMARY KEY,
   style TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL DEFAULT 'on',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS shapes (
-  shape_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  shape_id BIGSERIAL PRIMARY KEY,
   shape TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL DEFAULT 'on',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS materials (
-  material_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  material_id BIGSERIAL PRIMARY KEY,
   material TEXT NOT NULL UNIQUE,
   image TEXT,
   status TEXT NOT NULL DEFAULT 'on',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS tags (
-  tag_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tag_id BIGSERIAL PRIMARY KEY,
   tag TEXT NOT NULL UNIQUE,
   viewed_number INTEGER NOT NULL DEFAULT 0,
   attendance_number INTEGER NOT NULL DEFAULT 0,
   created_by_type TEXT NOT NULL DEFAULT 'admin',
   created_by_user_id TEXT,
   status TEXT NOT NULL DEFAULT 'on',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (created_by_user_id) REFERENCES users(user_id)
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS topics (
-  topic_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic_id BIGSERIAL PRIMARY KEY,
   topic TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT now(),
   view_number INTEGER NOT NULL DEFAULT 0,
   attendance_number INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'on'
 );
 
 CREATE TABLE IF NOT EXISTS taxonomy_links (
-  taxonomy_link_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  taxonomy_link_id BIGSERIAL PRIMARY KEY,
   taxonomy_type TEXT NOT NULL,
   taxonomy_id INTEGER NOT NULL,
   target_type TEXT NOT NULL,
   target_id TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT now(),
   UNIQUE(taxonomy_type, taxonomy_id, target_type, target_id)
 );
 
@@ -236,7 +229,7 @@ CREATE TABLE IF NOT EXISTS templates (
   material_categories TEXT,
   topic_tags TEXT,
   tags TEXT,
-  event_id TEXT,
+  event_id BIGINT,
   template_object_json TEXT,
   cover_asset_id TEXT,
   image_asset_id TEXT,
@@ -252,21 +245,15 @@ CREATE TABLE IF NOT EXISTS templates (
   favorite_count INTEGER NOT NULL DEFAULT 0,
   comment_count INTEGER NOT NULL DEFAULT 0,
   published_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (author_user_id) REFERENCES users(user_id),
-  FOREIGN KEY (event_id) REFERENCES events(event_id),
-  FOREIGN KEY (cover_asset_id) REFERENCES assets(asset_id),
-  FOREIGN KEY (image_asset_id) REFERENCES assets(asset_id),
-  FOREIGN KEY (author_avatar_asset_id) REFERENCES assets(asset_id)
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS personal_galleries (
   personal_gallery_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   gallery_name TEXT NOT NULL DEFAULT 'Personal Gallery',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS official_galleries (
@@ -275,14 +262,14 @@ CREATE TABLE IF NOT EXISTS official_galleries (
   description TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS community_galleries (
   community_gallery_id TEXT PRIMARY KEY,
   gallery_name TEXT NOT NULL,
   description TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS gallery_templates (
@@ -292,10 +279,8 @@ CREATE TABLE IF NOT EXISTS gallery_templates (
   template_id TEXT NOT NULL,
   user_id TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
-  added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(gallery_type, gallery_id, template_id),
-  FOREIGN KEY (template_id) REFERENCES templates(template_id),
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  added_at TEXT NOT NULL DEFAULT now(),
+  UNIQUE(gallery_type, gallery_id, template_id)
 );
 
 CREATE TABLE IF NOT EXISTS draft_cache (
@@ -304,14 +289,12 @@ CREATE TABLE IF NOT EXISTS draft_cache (
   draft_type TEXT NOT NULL DEFAULT 'design_canvas',
   draft_content_json TEXT NOT NULL,
   preview_asset_id TEXT,
-  saved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  is_auto_draft INTEGER NOT NULL DEFAULT 0,
-  FOREIGN KEY (user_id) REFERENCES users(user_id),
-  FOREIGN KEY (preview_asset_id) REFERENCES assets(asset_id)
+  saved_at TEXT NOT NULL DEFAULT now(),
+  is_auto_draft INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS events (
-  event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id BIGSERIAL PRIMARY KEY,
   event_type TEXT,
   event_name TEXT NOT NULL,
   event_title TEXT,
@@ -323,57 +306,51 @@ CREATE TABLE IF NOT EXISTS events (
   expires_at TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   sort_order INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (banner_asset_id) REFERENCES assets(asset_id),
-  FOREIGN KEY (promo_asset_id) REFERENCES promotional_assets(promo_asset_id)
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS community_interaction_events (
-  event_id INTEGER PRIMARY KEY,
+  event_id BIGSERIAL PRIMARY KEY,
   community_action_type TEXT,
   target_area TEXT,
   min_actions INTEGER NOT NULL DEFAULT 0,
   reward_points INTEGER NOT NULL DEFAULT 0,
-  rules_json TEXT,
-  FOREIGN KEY (event_id) REFERENCES events(event_id)
+  rules_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS external_social_events (
-  event_id INTEGER PRIMARY KEY,
+  event_id BIGSERIAL PRIMARY KEY,
   platforms TEXT,
   post_requirements TEXT,
   hashtags TEXT,
   reward_points INTEGER NOT NULL DEFAULT 0,
-  tracking_rule TEXT,
-  FOREIGN KEY (event_id) REFERENCES events(event_id)
+  tracking_rule TEXT
 );
 
 CREATE TABLE IF NOT EXISTS design_collection_events (
-  event_id INTEGER PRIMARY KEY,
+  event_id BIGSERIAL PRIMARY KEY,
   design_brief TEXT,
   required_shape TEXT,
   required_style TEXT,
   submission_limit INTEGER NOT NULL DEFAULT 1,
   reward_points INTEGER NOT NULL DEFAULT 0,
-  judge_rule TEXT,
-  FOREIGN KEY (event_id) REFERENCES events(event_id)
+  judge_rule TEXT
 );
 
 CREATE TABLE IF NOT EXISTS promotion_discount_events (
-  event_id INTEGER PRIMARY KEY,
+  event_id BIGSERIAL PRIMARY KEY,
   promo_scope TEXT NOT NULL DEFAULT 'all_products',
   target_product_ids TEXT,
   discount_type TEXT NOT NULL DEFAULT 'percent_off',
-  discount_value REAL NOT NULL DEFAULT 0,
-  min_spend REAL NOT NULL DEFAULT 0,
-  max_discount REAL,
+  discount_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+  min_spend DOUBLE PRECISION NOT NULL DEFAULT 0,
+  max_discount DOUBLE PRECISION,
   stackable INTEGER NOT NULL DEFAULT 0,
-  price_rule_json TEXT,
-  FOREIGN KEY (event_id) REFERENCES events(event_id)
+  price_rule_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
-  task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id BIGSERIAL PRIMARY KEY,
   event_id INTEGER,
   task_type TEXT NOT NULL,
   task_name TEXT NOT NULL,
@@ -386,9 +363,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   start_at TEXT,
   expires_at TEXT,
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (event_id) REFERENCES events(event_id),
-  FOREIGN KEY (promo_asset_id) REFERENCES promotional_assets(promo_asset_id)
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS task_condition_reward (
@@ -398,28 +373,24 @@ CREATE TABLE IF NOT EXISTS task_condition_reward (
   quantity INTEGER NOT NULL DEFAULT 0,
   reward_type TEXT NOT NULL,
   reward_quantity INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (task_id, sequence_id),
-  FOREIGN KEY (task_id) REFERENCES tasks(task_id)
+  PRIMARY KEY (task_id, sequence_id)
 );
 
 CREATE TABLE IF NOT EXISTS task_drafts (
   task_draft_id TEXT PRIMARY KEY,
-  task_id TEXT NOT NULL,
-  event_id TEXT,
+  task_id BIGINT NOT NULL,
+  event_id BIGINT,
   user_id TEXT NOT NULL,
   platform TEXT,
   upload_content TEXT,
   content_type TEXT,
-  saved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (task_id) REFERENCES tasks(task_id),
-  FOREIGN KEY (event_id) REFERENCES events(event_id),
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  saved_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS task_submissions (
   submission_id TEXT PRIMARY KEY,
-  task_id TEXT NOT NULL,
-  event_id TEXT,
+  task_id BIGINT NOT NULL,
+  event_id BIGINT,
   user_id TEXT NOT NULL,
   platform TEXT,
   content_type TEXT NOT NULL,
@@ -427,53 +398,45 @@ CREATE TABLE IF NOT EXISTS task_submissions (
   status TEXT NOT NULL DEFAULT 'submitted',
   reviewed_by TEXT,
   reward_points INTEGER NOT NULL DEFAULT 0,
-  submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  reviewed_at TEXT,
-  FOREIGN KEY (task_id) REFERENCES tasks(task_id),
-  FOREIGN KEY (event_id) REFERENCES events(event_id),
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  submitted_at TEXT NOT NULL DEFAULT now(),
+  reviewed_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS task_records (
-  task_record_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_record_id BIGSERIAL PRIMARY KEY,
   task_id INTEGER NOT NULL,
   tasktype TEXT NOT NULL,
   user_id TEXT NOT NULL,
   content_upload TEXT,
-  upload_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  upload_at TEXT NOT NULL DEFAULT now(),
   rating_result TEXT NOT NULL DEFAULT 'F',
   status TEXT NOT NULL DEFAULT 'submitted',
   current_reward TEXT,
-  CHECK (rating_result IN ('F', 'D', 'C', 'B', 'A', 'S', 'pass', 'fail')),
-  FOREIGN KEY (task_id) REFERENCES tasks(task_id),
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  CHECK (rating_result IN ('F', 'D', 'C', 'B', 'A', 'S', 'pass', 'fail'))
 );
 
 CREATE TABLE IF NOT EXISTS event_participation (
-  event_participation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_participation_id BIGSERIAL PRIMARY KEY,
   event_id INTEGER NOT NULL,
   event_name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT now(),
   user_id TEXT NOT NULL,
   current_total_earnpoint INTEGER NOT NULL DEFAULT 0,
   current_earned_coupon_number INTEGER NOT NULL DEFAULT 0,
   current_total_earned_template_number INTEGER NOT NULL DEFAULT 0,
-  UNIQUE(event_id, user_id),
-  FOREIGN KEY (event_id) REFERENCES events(event_id),
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  UNIQUE(event_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS user_comments (
-  comment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  comment_id BIGSERIAL PRIMARY KEY,
   post_id TEXT NOT NULL,
   comment_type TEXT NOT NULL DEFAULT 'primary',
   user_id TEXT NOT NULL,
-  commented_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  commented_at TEXT NOT NULL DEFAULT now(),
   comment_content TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'visible',
   CHECK (comment_type IN ('primary', 'secondary')),
-  CHECK (status IN ('visible', 'hidden')),
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  CHECK (status IN ('visible', 'hidden'))
 );
 
 CREATE TABLE IF NOT EXISTS coupons (
@@ -482,12 +445,12 @@ CREATE TABLE IF NOT EXISTS coupons (
   coupon_type TEXT NOT NULL,
   coupon_content_json TEXT,
   discount_type TEXT,
-  discount_value REAL,
-  min_spend REAL,
+  discount_value DOUBLE PRECISION,
+  min_spend DOUBLE PRECISION,
   expiry_date TEXT,
   use_with_other_coupon INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS promotion (
@@ -497,21 +460,19 @@ CREATE TABLE IF NOT EXISTS promotion (
   promo_content TEXT,
   expire_date TEXT,
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CHECK (promo_type IN ('满减优惠', '折扣优惠', '买送优惠', '免费商品'))
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now(),
+  CHECK (promo_type IN ('money_off', 'percent_off', 'buy_x_get_y', 'free_product'))
 );
 
 CREATE TABLE IF NOT EXISTS user_promo (
   user_promo_id TEXT PRIMARY KEY,
   promo_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
-  assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  assigned_at TEXT NOT NULL DEFAULT now(),
   used_at TEXT,
   status TEXT NOT NULL DEFAULT 'unused',
-  UNIQUE(promo_id, user_id),
-  FOREIGN KEY (promo_id) REFERENCES promotion(promo_id),
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  UNIQUE(promo_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS rewards (
@@ -532,7 +493,7 @@ CREATE TABLE IF NOT EXISTS rewards (
   stock_l INTEGER NOT NULL DEFAULT 0,
   stock_xl INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS member_awards (
@@ -541,14 +502,11 @@ CREATE TABLE IF NOT EXISTS member_awards (
   member_id TEXT NOT NULL,
   coupon_id TEXT,
   reward_id TEXT,
-  gain_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  gain_date TEXT NOT NULL DEFAULT now(),
   expiry_date TEXT,
   quantity INTEGER NOT NULL DEFAULT 1,
   is_applied INTEGER NOT NULL DEFAULT 0,
-  applied_at TEXT,
-  FOREIGN KEY (member_id) REFERENCES members(member_id),
-  FOREIGN KEY (coupon_id) REFERENCES coupons(coupon_id),
-  FOREIGN KEY (reward_id) REFERENCES rewards(reward_id)
+  applied_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS point_transactions (
@@ -558,15 +516,14 @@ CREATE TABLE IF NOT EXISTS point_transactions (
   source_id TEXT,
   points_change INTEGER NOT NULL,
   balance_after INTEGER NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (member_id) REFERENCES members(member_id)
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS products (
   product_id TEXT PRIMARY KEY,
   product_type TEXT,
   product_name TEXT NOT NULL,
-  unit_price REAL NOT NULL DEFAULT 0,
+  unit_price DOUBLE PRECISION NOT NULL DEFAULT 0,
   product_info TEXT,
   image_url TEXT,
   image_base64 TEXT,
@@ -583,25 +540,22 @@ CREATE TABLE IF NOT EXISTS products (
   pickup_method TEXT NOT NULL DEFAULT 'both',
   is_featured INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (cover_asset_id) REFERENCES assets(asset_id)
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS orders (
   order_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   address_id TEXT,
-  total_price REAL NOT NULL DEFAULT 0,
+  total_price DOUBLE PRECISION NOT NULL DEFAULT 0,
   pay_method TEXT,
   payment_status TEXT NOT NULL DEFAULT 'pending',
   delivery_status TEXT NOT NULL DEFAULT 'not_required',
   order_status TEXT NOT NULL DEFAULT 'created',
-  print_code TEXT CHECK (print_code IS NULL OR (length(print_code)=6 AND print_code NOT GLOB '*[^0-9]*')),
-  pickup_code TEXT NOT NULL DEFAULT '000000' CHECK (pickup_code != '' AND pickup_code NOT GLOB '*[^0-9]*'),
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  paid_at TEXT,
-  FOREIGN KEY (user_id) REFERENCES users(user_id),
-  FOREIGN KEY (address_id) REFERENCES addresses(address_id)
+  print_code TEXT CHECK (print_code IS NULL OR print_code ~ '^[0-9]{6}$'),
+  pickup_code TEXT NOT NULL DEFAULT '000000' CHECK (pickup_code ~ '^[0-9]+$'),
+  created_at TEXT NOT NULL DEFAULT now(),
+  paid_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -609,9 +563,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   order_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   quantity INTEGER NOT NULL DEFAULT 1,
-  unit_price REAL NOT NULL DEFAULT 0,
-  FOREIGN KEY (order_id) REFERENCES orders(order_id),
-  FOREIGN KEY (product_id) REFERENCES products(product_id)
+  unit_price DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS cart_items (
@@ -619,11 +571,9 @@ CREATE TABLE IF NOT EXISTS cart_items (
   user_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   quantity INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(user_id, product_id),
-  FOREIGN KEY (user_id) REFERENCES users(user_id),
-  FOREIGN KEY (product_id) REFERENCES products(product_id)
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now(),
+  UNIQUE(user_id, product_id)
 );
 
 CREATE TABLE IF NOT EXISTS reward_orders (
@@ -634,10 +584,7 @@ CREATE TABLE IF NOT EXISTS reward_orders (
   quantity INTEGER NOT NULL DEFAULT 1,
   point_cost INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'created',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (member_id) REFERENCES members(member_id),
-  FOREIGN KEY (reward_id) REFERENCES rewards(reward_id),
-  FOREIGN KEY (address_id) REFERENCES addresses(address_id)
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS comments (
@@ -649,9 +596,7 @@ CREATE TABLE IF NOT EXISTS comments (
   content TEXT NOT NULL,
   like_count INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'published',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (parent_comment_id) REFERENCES comments(comment_id),
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS user_actions (
@@ -660,9 +605,8 @@ CREATE TABLE IF NOT EXISTS user_actions (
   target_type TEXT NOT NULL,
   target_id TEXT NOT NULL,
   action_type TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(user_id, target_type, target_id, action_type),
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+  created_at TEXT NOT NULL DEFAULT now(),
+  UNIQUE(user_id, target_type, target_id, action_type)
 );
 
 CREATE TABLE IF NOT EXISTS devices (
@@ -672,17 +616,17 @@ CREATE TABLE IF NOT EXISTS devices (
   status TEXT NOT NULL DEFAULT 'offline',
   last_online_at TEXT,
   current_task_id TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS device_info (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id BIGSERIAL PRIMARY KEY,
   equip_id TEXT NOT NULL,
-  type TEXT NOT NULL CHECK(type IN ('主机', '打印机')),
+  type TEXT NOT NULL CHECK(type IN ('main_unit', 'printer')),
   address TEXT,
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT now(),
+  updated_at TEXT NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS print_jobs (
@@ -695,15 +639,9 @@ CREATE TABLE IF NOT EXISTS print_jobs (
   preview_asset_id TEXT,
   status TEXT NOT NULL DEFAULT 'created',
   error_message TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT now(),
   sent_at TEXT,
-  completed_at TEXT,
-  FOREIGN KEY (user_id) REFERENCES users(user_id),
-  FOREIGN KEY (template_id) REFERENCES templates(template_id),
-  FOREIGN KEY (draft_id) REFERENCES draft_cache(draft_id),
-  FOREIGN KEY (coupon_id) REFERENCES coupons(coupon_id),
-  FOREIGN KEY (device_id) REFERENCES devices(device_id),
-  FOREIGN KEY (preview_asset_id) REFERENCES assets(asset_id)
+  completed_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ai_jobs (
@@ -719,10 +657,8 @@ CREATE TABLE IF NOT EXISTS ai_jobs (
   error_code TEXT,
   error_message TEXT,
   request_id TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  completed_at TEXT,
-  FOREIGN KEY (user_id) REFERENCES users(user_id),
-  FOREIGN KEY (selected_asset_id) REFERENCES assets(asset_id)
+  created_at TEXT NOT NULL DEFAULT now(),
+  completed_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_templates_source ON templates(source_type, status);
