@@ -163,13 +163,17 @@ function createSquarePaymentService(options = {}) {
 
     const parsed = parseJsonOrRaw(rawText);
     if (!response.ok) {
+      const failure = formatSquareFailure(parsed, response.status);
       return {
         httpStatus: response.status,
         body: {
           ok: false,
-          error: "Square payment was rejected.",
+          error: "Payment failed.",
+          message: failure.message,
+          failureReason: failure.reason,
           provider: "square",
           status: response.status,
+          errors: failure.errors,
           details: parsed.errors || parsed,
         },
       };
@@ -213,6 +217,26 @@ function parseJsonOrRaw(text) {
   } catch {
     return { raw: text };
   }
+}
+
+function formatSquareFailure(parsed, status) {
+  const sourceErrors = Array.isArray(parsed?.errors) ? parsed.errors : [];
+  const errors = sourceErrors.map((item) => ({
+    category: stringValue(item.category),
+    code: stringValue(item.code),
+    detail: stringValue(item.detail || item.message),
+    field: stringValue(item.field),
+  }));
+  const details = errors
+    .map((item) => [item.code, item.detail].filter(Boolean).join(": "))
+    .filter(Boolean);
+  const fallback = stringValue(parsed?.error || parsed?.message || parsed?.raw);
+  const reason = details.join(" | ") || fallback || `Square returned HTTP ${status}.`;
+  return {
+    reason,
+    message: `Payment failed: ${reason}`,
+    errors,
+  };
 }
 
 function randomId() {

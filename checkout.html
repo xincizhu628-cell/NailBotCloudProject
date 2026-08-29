@@ -447,9 +447,23 @@
         const response = await fetch(url, options);
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(payload.error || `Request failed: ${response.status}`);
+          const message = paymentErrorMessage(payload, response.status);
+          const error = new Error(message);
+          error.payload = payload;
+          error.status = response.status;
+          throw error;
         }
         return payload;
+      }
+
+      function paymentErrorMessage(payload = {}, status = "") {
+        const squareErrors = Array.isArray(payload.errors) ? payload.errors : [];
+        const squareDetails = squareErrors
+          .map((item) => [item.code, item.detail || item.message].filter(Boolean).join(": "))
+          .filter(Boolean);
+        const detailText = squareDetails.join(" | ");
+        const reason = payload.failureReason || payload.message || detailText || payload.error || `Request failed: ${status}`;
+        return /^payment failed/i.test(reason) ? reason : `Payment failed: ${reason}`;
       }
 
       async function loadConfig() {
