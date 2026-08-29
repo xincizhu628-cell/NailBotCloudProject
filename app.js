@@ -1627,6 +1627,7 @@ function templateImageSource(design) {
   if (!design) return "";
   if (design.image) return design.image;
   if (Array.isArray(design.imageList) && design.imageList.length) return design.imageList[0];
+  if (Array.isArray(design.image_list) && design.image_list.length) return design.image_list[0];
   if (design.src) return design.src;
   if (design.data) return design.data;
   const match = String(design.thumb || "").match(/^url\((['"]?)(.*?)\1\)$/);
@@ -1636,6 +1637,7 @@ function templateImageSource(design) {
 function templateImageList(design) {
   if (!design) return [];
   if (Array.isArray(design.imageList) && design.imageList.length) return design.imageList.filter(Boolean);
+  if (Array.isArray(design.image_list) && design.image_list.length) return design.image_list.filter(Boolean);
   const primary = templateImageSource(design);
   return primary ? [primary] : [];
 }
@@ -4915,7 +4917,8 @@ function installDebugBridge() {
           ? publicCatalog.material_bases.map((item) => ({
               templateId: item.template_id,
               material: item.material_type,
-              count: Array.isArray(item.image_list) ? item.image_list.length : 0,
+              count: templateImageList(item).length,
+              firstImageType: templateImageSource(item).startsWith("data:") ? "base64" : (templateImageSource(item) ? "url" : "empty"),
             }))
           : [],
       };

@@ -2961,6 +2961,19 @@ function parsePgJsonList(value) {
   }
 }
 
+function parsePgImageList(value) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  const text = String(value || "").trim();
+  if (!text) return [];
+  if (/^(data:image\/|https?:\/\/)/i.test(text)) return [text];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [String(parsed || "")].filter(Boolean);
+  } catch {
+    return splitPgValues(text);
+  }
+}
+
 async function safePgRows(query, params = []) {
   try {
     return (await pgPool.query(query, params)).rows;
@@ -3160,7 +3173,10 @@ async function loadPgTemplates() {
 }
 
 async function loadPgMaterialBases() {
-  const assets = await pgAssetMap();
+  const [assets, materialRows] = await Promise.all([
+    pgAssetMap(),
+    safePgRows("SELECT material_id, material, image, status FROM materials WHERE status='on' ORDER BY created_at ASC"),
+  ]);
   const items = await safePgRows(`
     SELECT
       t.template_id,
@@ -3195,7 +3211,7 @@ async function loadPgMaterialBases() {
       )
     ORDER BY COALESCE(t.updated_at, t.created_at) DESC
   `);
-  return items.map((item) => {
+  const templateItems = items.map((item) => {
     const imageList = [];
     for (const assetId of parsePgJsonList(item.image_asset_ids)) {
       const source = pgAssetSource(assets.get(assetId));
@@ -3216,6 +3232,27 @@ async function loadPgMaterialBases() {
       image_list: imageList,
     };
   }).filter((item) => item.image_list.length || item.image_url);
+  const materialItems = materialRows.map((item) => {
+    const imageList = parsePgImageList(item.image)
+      .map((source) => pgAssetSource(assets.get(source)) || source)
+      .filter(Boolean);
+    return {
+      template_id: `material_${item.material_id}_${item.material}`,
+      source_type: "official",
+      template_name: item.material,
+      template_title: item.material,
+      nail_shape: "",
+      material_type: item.material,
+      shape_categories: "",
+      material_categories: item.material,
+      image_asset_ids: "",
+      image_asset_id: "",
+      image_url: imageList[0] || "",
+      image_base64: "",
+      image_list: imageList,
+    };
+  }).filter((item) => item.image_list.length || item.image_url);
+  return [...materialItems, ...templateItems];
 }
 
 async function loadPgProducts() {
