@@ -91,7 +91,19 @@
     size: "Size",
     stock: "Stock",
     quantity: "Quantity",
-    pickupOption: "Pickup Option",
+    pickupOption: "Fulfillment Method",
+    pickupMethod: "Pickup",
+    shippingMethod: "Delivery",
+    selectPickupLocation: "Select pickup location",
+    enterShippingAddress: "Enter delivery address",
+    selectedPickup: "Selected pickup",
+    selectedShipping: "Selected delivery",
+    unavailableOption: "Unavailable",
+    productRemark: "Remark",
+    cartEdit: "Edit",
+    cartDelete: "Delete",
+    saveChanges: "Save Changes",
+    cancel: "Cancel",
     pickupAddress: "Pickup at",
     shippingAddress: "Ship to",
     noShippingAddress: "You have not entered a shipping address.",
@@ -374,7 +386,19 @@
     size: "尺寸",
     stock: "库存",
     quantity: "数量",
-    pickupOption: "取货选项",
+    pickupOption: "取货方式",
+    pickupMethod: "自取",
+    shippingMethod: "配送",
+    selectPickupLocation: "选择取货地点",
+    enterShippingAddress: "输入配送地址",
+    selectedPickup: "已选择自取",
+    selectedShipping: "已选择配送",
+    unavailableOption: "不可用",
+    productRemark: "备注",
+    cartEdit: "编辑",
+    cartDelete: "删除",
+    saveChanges: "保存改动",
+    cancel: "取消",
     pickupAddress: "自提地址",
     shippingAddress: "邮寄到",
     noShippingAddress: "您还没有填写地址。",
@@ -590,6 +614,11 @@ let activeProductIndex = null;
 let communityTemplateUploadImage = null;
 let activeProductSize = "M";
 let activeProductQty = 1;
+let activeProductFulfillmentMode = "";
+let activeProductPickupDevice = null;
+let activeProductShippingAddress = "";
+let activeProductRemark = "";
+let activeCartEditIndex = -1;
 let activeProductPromoIndex = 0;
 let productPromoTimer = null;
 const PRODUCT_RENDER_BATCH = 15;
@@ -602,6 +631,7 @@ let productImageObserver = null;
 const productCart = [];
 const CHECKOUT_DRAFT_KEY = "nailStudioCheckoutDraftV1";
 const PRODUCT_CART_KEY = "nailStudioProductCartV1";
+const PRODUCT_TEMP_ADDRESS_KEY = "nailStudioTempShippingAddressV1";
 const USER_AUTH_SESSION_KEY = "nailStudioUserAuthSessionV1";
 const USER_GUEST_CONTINUE_KEY = "nailStudioGuestContinueV1";
 const productSizeOrder = ["S", "M", "L", "XL"];
@@ -3956,6 +3986,11 @@ function restoreProductCart() {
         id: String(line.id),
         qty: Math.max(1, Math.min(99, Number(line.qty) || 1)),
         size: productSizeOrder.includes(String(line.size || "").toUpperCase()) ? String(line.size).toUpperCase() : "M",
+        fulfillmentMode: ["pickup", "shipping"].includes(String(line.fulfillmentMode || "")) ? String(line.fulfillmentMode) : "",
+        pickupDeviceId: String(line.pickupDeviceId || ""),
+        pickupLabel: String(line.pickupLabel || ""),
+        shippingAddress: String(line.shippingAddress || ""),
+        remark: String(line.remark || ""),
       })));
   } catch (error) {
     console.warn("[cart] Failed to restore cart", error);
@@ -3970,9 +4005,23 @@ function currentCheckoutItems(mode = "cart") {
       id: product.id,
       qty: Math.max(1, Number(activeProductQty || 1)),
       size: activeProductSize,
+      fulfillmentMode: activeProductFulfillmentMode,
+      pickupDeviceId: activeProductPickupDevice?.id || "",
+      pickupLabel: activeProductPickupDevice ? pickupDeviceLabel(activeProductPickupDevice) : "",
+      shippingAddress: activeProductShippingAddress,
+      remark: activeProductRemark,
     }];
   }
-  return productCart.map((line) => ({ id: line.id, qty: line.qty, size: line.size || "M" }));
+  return productCart.map((line) => ({
+    id: line.id,
+    qty: line.qty,
+    size: line.size || "M",
+    fulfillmentMode: line.fulfillmentMode || "",
+    pickupDeviceId: line.pickupDeviceId || "",
+    pickupLabel: line.pickupLabel || "",
+    shippingAddress: line.shippingAddress || "",
+    remark: line.remark || "",
+  }));
 }
 
 function checkoutSnapshot(mode = "cart") {
@@ -3990,6 +4039,11 @@ function checkoutSnapshot(mode = "cart") {
       tags: Array.isArray(product.tags) ? product.tags.slice(0, 6) : [],
       shape: product.shape || "",
       style: product.style || "",
+      fulfillmentMode: line.fulfillmentMode || "",
+      pickupDeviceId: line.pickupDeviceId || "",
+      pickupLabel: line.pickupLabel || "",
+      shippingAddress: line.shippingAddress || "",
+      remark: line.remark || "",
     };
   }).filter(Boolean);
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -4137,15 +4191,31 @@ function syncProductDetailSummary() {
   $("#product-detail-total").textContent = money(stock > 0 ? Number(product.price || 0) * activeProductQty : 0);
   const buyButton = $("#buy-product-now");
   const cartButton = $("#add-product-cart");
+  const fulfillmentReady = isActiveProductFulfillmentReady(product);
   [buyButton, cartButton].forEach((button) => {
     if (!button) return;
-    button.toggleAttribute("disabled", stock <= 0);
-    if ("href" in button && stock <= 0) button.removeAttribute("href");
+    button.toggleAttribute("disabled", stock <= 0 || !fulfillmentReady);
+    if ("href" in button && (stock <= 0 || !fulfillmentReady)) button.removeAttribute("href");
     else if (button === buyButton) button.setAttribute("href", "checkout.html");
   });
   $$("#product-size-grid button").forEach((button) => {
     button.classList.toggle("active", button.dataset.productSize === activeProductSize);
   });
+}
+
+function isActiveProductFulfillmentReady(product) {
+  if (!product) return false;
+  const available = productFulfillmentAvailability(product);
+  if (activeProductFulfillmentMode === "pickup") return available.pickup && Boolean(activeProductPickupDevice);
+  if (activeProductFulfillmentMode === "shipping") return available.shipping && Boolean(activeProductShippingAddress);
+  return false;
+}
+
+function promptMissingFulfillment(product) {
+  const available = productFulfillmentAvailability(product);
+  if (available.pickup && !available.shipping) openProductPickupModal();
+  else if (available.shipping && !available.pickup) openProductShippingModal();
+  else showToast(lang === "zh" ? "请先选择取货方式。" : "Please choose a fulfillment method first.");
 }
 
 function fulfillmentMode(product) {
@@ -4155,6 +4225,51 @@ function fulfillmentMode(product) {
   if (product?.supportsPickup === true && product?.supportsShipping === false) return "pickup";
   if (product?.supportsShipping === true && product?.supportsPickup === false) return "shipping";
   return "both";
+}
+
+function productFulfillmentAvailability(product) {
+  const mode = fulfillmentMode(product);
+  return {
+    pickup: mode === "pickup" || mode === "both",
+    shipping: mode === "shipping" || mode === "both",
+  };
+}
+
+function pickupDevices() {
+  const rows = Array.isArray(publicCatalog?.device_info) ? publicCatalog.device_info : [];
+  const hostRows = rows.filter((item) => {
+    const type = String(item.type || "").toLowerCase();
+    return type.includes("host") || type.includes("主机") || type.includes("main");
+  });
+  const source = hostRows.length ? hostRows : rows;
+  if (source.length) return source;
+  return [
+    { id: "boxhill-1", equip_id: "Boxhill1", address: "Boxhill pickup kiosk" },
+    { id: "boxhill-2", equip_id: "Boxhill2", address: "Boxhill pickup kiosk" },
+    { id: "chadstone-maita", equip_id: "Chadstone Maita", address: "Chadstone Maita pickup kiosk" },
+    { id: "dfo-south-wharf", equip_id: "DFO South Wharf", address: "DFO South Wharf pickup kiosk" },
+  ];
+}
+
+function pickupDeviceLabel(device) {
+  if (!device) return "";
+  return [device.equip_id || device.id, device.address].filter(Boolean).join(" · ");
+}
+
+function temporaryShippingAddress() {
+  try {
+    return localStorage.getItem(PRODUCT_TEMP_ADDRESS_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function setTemporaryShippingAddress(address) {
+  try {
+    localStorage.setItem(PRODUCT_TEMP_ADDRESS_KEY, String(address || "").trim());
+  } catch (error) {
+    console.warn("[cart] Failed to store temporary shipping address", error);
+  }
 }
 
 async function loadUserShippingAddress() {
@@ -4175,55 +4290,90 @@ async function loadUserShippingAddress() {
 async function renderProductFulfillment(product) {
   const box = $("#product-fulfillment-options");
   if (!box || !product) return;
-  const mode = fulfillmentMode(product);
-  const pickupHtml = `
+  const available = productFulfillmentAvailability(product);
+  const selectedPickup = activeProductFulfillmentMode === "pickup" && activeProductPickupDevice;
+  const selectedShipping = activeProductFulfillmentMode === "shipping" && activeProductShippingAddress;
+  const selectedFulfillmentText = selectedPickup
+    ? pickupDeviceLabel(activeProductPickupDevice)
+    : selectedShipping
+      ? activeProductShippingAddress
+      : (lang === "zh" ? "请选择自取或配送。" : "Choose pickup or delivery.");
+  box.innerHTML = `
+    <div class="product-fulfillment-choice-row">
+      <button type="button" data-product-fulfillment="pickup" class="${selectedPickup ? "active" : ""}" ${available.pickup ? "" : "disabled"}>
+        <strong>${t("pickupMethod")}</strong>
+        <small>${available.pickup ? t("selectPickupLocation") : t("unavailableOption")}</small>
+      </button>
+      <button type="button" data-product-fulfillment="shipping" class="${selectedShipping ? "active" : ""}" ${available.shipping ? "" : "disabled"}>
+        <strong>${t("shippingMethod")}</strong>
+        <small>${available.shipping ? t("enterShippingAddress") : t("unavailableOption")}</small>
+      </button>
+    </div>
     <section class="product-fulfillment-option">
-      <strong>${t("pickupAddress")}</strong>
-      <p>Boxhill / Chadstone / DFO South Wharf pickup kiosk</p>
+      <strong>${activeProductFulfillmentMode === "pickup" ? t("selectedPickup") : activeProductFulfillmentMode === "shipping" ? t("selectedShipping") : t("pickupOption")}</strong>
+      <p>${escapeAttribute(selectedFulfillmentText)}</p>
     </section>
   `;
-  const needsShipping = mode === "shipping" || mode === "both";
-  let shippingHtml = "";
-  if (needsShipping) {
-    box.innerHTML = `${mode !== "shipping" ? pickupHtml : ""}<section class="product-fulfillment-option"><strong>${t("shippingAddress")}</strong><p>${lang === "zh" ? "正在读取地址..." : "Loading address..."}</p></section>`;
-    const result = await loadUserShippingAddress();
-    const address = String(result.address || "").trim();
-    shippingHtml = `
-      <section class="product-fulfillment-option product-shipping-option">
-        <strong>${t("shippingAddress")}</strong>
-        ${address ? `<p>${address}</p>` : `<p>${t("noShippingAddress")}</p>`}
-        <div class="product-address-row">
-          <input id="product-shipping-address" type="text" value="${escapeAttribute(address)}" placeholder="${lang === "zh" ? "填写邮寄地址" : "Enter shipping address"}" />
-          <button type="button" id="save-product-address">${t("saveAddress")}</button>
-        </div>
-      </section>
-    `;
-  }
-  box.innerHTML = `${mode === "shipping" ? "" : pickupHtml}${shippingHtml}`;
 }
 
-async function saveProductShippingAddress() {
-  const input = $("#product-shipping-address");
-  const address = String(input?.value || "").trim();
-  const sessionId = storedAuthSessionId();
-  if (!address || !sessionId) {
-    showToast(t("addressSaveFailed"));
+async function openProductShippingModal() {
+  const input = $("#product-shipping-modal-address");
+  if (!input) return;
+  const remembered = temporaryShippingAddress();
+  let address = remembered || activeProductShippingAddress;
+  if (!address) {
+    const result = await loadUserShippingAddress();
+    address = String(result.address || "").trim();
+  }
+  input.value = address;
+  $("#product-shipping-modal")?.classList.remove("hidden");
+}
+
+function closeProductShippingModal() {
+  $("#product-shipping-modal")?.classList.add("hidden");
+}
+
+function confirmProductShippingAddress() {
+  const address = String($("#product-shipping-modal-address")?.value || "").trim();
+  if (!address) {
+    showToast(t("noShippingAddress"));
     return;
   }
-  try {
-    const response = await fetch("/api/user/shipping-address", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "save", sessionId, address }),
-    });
-    const result = await response.json();
-    if (!response.ok || result.ok === false) throw new Error(result.error || "Failed");
-    showToast(t("addressSaved"));
-    const product = findProductById(activeProductIndex);
-    renderProductFulfillment(product);
-  } catch (error) {
-    showToast(error.message || t("addressSaveFailed"));
-  }
+  activeProductFulfillmentMode = "shipping";
+  activeProductShippingAddress = address;
+  activeProductPickupDevice = null;
+  setTemporaryShippingAddress(address);
+  closeProductShippingModal();
+  renderProductFulfillment(findProductById(activeProductIndex));
+  syncProductDetailSummary();
+}
+
+function openProductPickupModal() {
+  const list = $("#pickup-device-list");
+  if (!list) return;
+  const devices = pickupDevices();
+  list.innerHTML = devices.map((device, index) => `
+    <button type="button" data-pickup-device-index="${index}">
+      <strong>${escapeAttribute(device.equip_id || device.id || `Device ${index + 1}`)}</strong>
+      <small>${escapeAttribute(device.address || "")}</small>
+    </button>
+  `).join("");
+  $("#product-pickup-modal")?.classList.remove("hidden");
+}
+
+function closeProductPickupModal() {
+  $("#product-pickup-modal")?.classList.add("hidden");
+}
+
+function selectPickupDevice(index) {
+  const device = pickupDevices()[Number(index)];
+  if (!device) return;
+  activeProductFulfillmentMode = "pickup";
+  activeProductPickupDevice = device;
+  activeProductShippingAddress = "";
+  closeProductPickupModal();
+  renderProductFulfillment(findProductById(activeProductIndex));
+  syncProductDetailSummary();
 }
 
 function renderProductSizeOptions(product) {
@@ -4245,6 +4395,10 @@ function openProductDetail(productId) {
   activeProductIndex = product.id;
   activeProductSize = preferredProductSize(product);
   activeProductQty = 1;
+  activeProductFulfillmentMode = "";
+  activeProductPickupDevice = null;
+  activeProductShippingAddress = temporaryShippingAddress();
+  activeProductRemark = "";
   $("#product-detail-id").textContent = product.id;
   $("#product-detail-name").textContent = productName(product);
   $("#product-detail-description").textContent = product.desc;
@@ -4255,6 +4409,8 @@ function openProductDetail(productId) {
     ? `<img src="${product.image}" alt="${escapeAttribute(productName(product))}" loading="lazy" decoding="async">`
     : `<span class="press-nail-shape press-shape-${product.shape}"></span>`;
   $("#product-detail-tags").innerHTML = [product.style, product.shape, ...product.tags].map((tag) => `<span>${tag}</span>`).join("");
+  const remarkInput = $("#product-detail-remark");
+  if (remarkInput) remarkInput.value = "";
   renderProductSizeOptions(product);
   syncProductDetailSummary();
   renderProductFulfillment(product);
@@ -4270,15 +4426,39 @@ function addProductToCart(index = activeProductIndex) {
   if (!product) return;
   const stock = productSizeStock(product, activeProductSize);
   if (stock <= 0) return;
+  activeProductRemark = String($("#product-detail-remark")?.value || "").trim();
+  if (!isActiveProductFulfillmentReady(product)) {
+    promptMissingFulfillment(product);
+    return;
+  }
   const qty = Math.max(1, Math.min(stock, Number(activeProductQty || 1)));
-  const line = productCart.find((item) => item.id === product.id && item.size === activeProductSize);
+  const pickupDeviceId = activeProductPickupDevice?.id || activeProductPickupDevice?.equip_id || "";
+  const pickupLabel = activeProductPickupDevice ? pickupDeviceLabel(activeProductPickupDevice) : "";
+  const line = productCart.find((item) => (
+    item.id === product.id
+    && item.size === activeProductSize
+    && item.fulfillmentMode === activeProductFulfillmentMode
+    && String(item.pickupDeviceId || "") === String(pickupDeviceId || "")
+    && String(item.shippingAddress || "") === String(activeProductShippingAddress || "")
+    && String(item.remark || "") === String(activeProductRemark || "")
+  ));
   if (line) {
     line.qty = Math.min(stock, line.qty + qty);
   } else {
-    productCart.push({ id: product.id, qty, size: activeProductSize });
+    productCart.push({
+      id: product.id,
+      qty,
+      size: activeProductSize,
+      fulfillmentMode: activeProductFulfillmentMode,
+      pickupDeviceId,
+      pickupLabel,
+      shippingAddress: activeProductShippingAddress,
+      remark: activeProductRemark,
+    });
   }
   persistProductCart();
   renderCart();
+  closeProductDetail();
   showToast(t("productAdded"));
 }
 
@@ -4291,17 +4471,30 @@ function renderCart() {
   if (!productCart.length) {
     list.innerHTML = `<p class="muted">${t("cartEmpty")}</p>`;
   } else {
-    list.innerHTML = productCart.map((line) => {
+    list.innerHTML = productCart.map((line, index) => {
       const product = productItems().find((item) => item.id === line.id);
       if (!product) return "";
+      const fulfillment = line.fulfillmentMode === "pickup"
+        ? `${t("pickupMethod")} · ${line.pickupLabel || line.pickupDeviceId || ""}`
+        : line.fulfillmentMode === "shipping"
+          ? `${t("shippingMethod")} · ${line.shippingAddress || ""}`
+          : "";
       return `
-        <div class="cart-line">
+        <div class="cart-line" data-cart-index="${index}">
           <span class="cart-thumb" style="${productCoverStyle(product)}"></span>
           <div>
             <strong>${productName(product)}</strong>
             <small>${product.id} · ${t("size")} ${line.size || "M"} x ${line.qty}</small>
+            ${fulfillment ? `<small>${escapeAttribute(fulfillment)}</small>` : ""}
+            ${line.remark ? `<small>${t("productRemark")}: ${escapeAttribute(line.remark)}</small>` : ""}
           </div>
-          <b>${money(product.price * line.qty)}</b>
+          <div class="cart-line-side">
+            <b>${money(product.price * line.qty)}</b>
+            <div class="cart-line-actions">
+              <button type="button" data-cart-edit="${index}">${t("cartEdit")}</button>
+              <button type="button" data-cart-delete="${index}">${t("cartDelete")}</button>
+            </div>
+          </div>
         </div>
       `;
     }).join("");
@@ -4325,6 +4518,57 @@ function openCart() {
 
 function closeCart() {
   $("#cart-modal")?.classList.add("hidden");
+}
+
+function removeCartLine(index) {
+  const idx = Number(index);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= productCart.length) return;
+  productCart.splice(idx, 1);
+  persistProductCart();
+  renderCart();
+}
+
+function openCartEdit(index) {
+  const idx = Number(index);
+  const line = productCart[idx];
+  const product = line ? findProductById(line.id) : null;
+  if (!line || !product) return;
+  activeCartEditIndex = idx;
+  const sizeSelect = $("#cart-edit-size");
+  const qtyInput = $("#cart-edit-qty");
+  const remarkInput = $("#cart-edit-remark");
+  if (sizeSelect) {
+    sizeSelect.innerHTML = productSizeOrder.map((size) => {
+      const stock = productSizeStock(product, size);
+      return `<option value="${size}" ${line.size === size ? "selected" : ""} ${stock <= 0 ? "disabled" : ""}>${size} (${stock})</option>`;
+    }).join("");
+  }
+  if (qtyInput) {
+    const stock = productSizeStock(product, line.size || "M");
+    qtyInput.max = String(Math.max(1, stock || 1));
+    qtyInput.value = String(Math.max(1, Math.min(stock || 1, Number(line.qty || 1))));
+  }
+  if (remarkInput) remarkInput.value = line.remark || "";
+  $("#cart-edit-modal")?.classList.remove("hidden");
+}
+
+function closeCartEdit() {
+  activeCartEditIndex = -1;
+  $("#cart-edit-modal")?.classList.add("hidden");
+}
+
+function saveCartEdit() {
+  const line = productCart[activeCartEditIndex];
+  const product = line ? findProductById(line.id) : null;
+  if (!line || !product) return;
+  const size = String($("#cart-edit-size")?.value || line.size || "M").toUpperCase();
+  const stock = productSizeStock(product, size);
+  line.size = size;
+  line.qty = Math.max(1, Math.min(stock || 1, Number($("#cart-edit-qty")?.value || line.qty || 1)));
+  line.remark = String($("#cart-edit-remark")?.value || "").trim();
+  persistProductCart();
+  renderCart();
+  closeCartEdit();
 }
 
 function activateView(viewName) {
@@ -6752,6 +6996,12 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("#activate-selected-coupon")) activateSelectedCoupon();
   if (event.target.closest("#open-cart")) openCart();
   if (event.target.closest("#close-cart")) closeCart();
+  if (event.target.closest("#close-cart-edit-modal")) closeCartEdit();
+  if (event.target.closest("#save-cart-edit")) saveCartEdit();
+  const cartDelete = event.target.closest("[data-cart-delete]");
+  if (cartDelete) removeCartLine(cartDelete.dataset.cartDelete);
+  const cartEdit = event.target.closest("[data-cart-edit]");
+  if (cartEdit) openCartEdit(cartEdit.dataset.cartEdit);
   if (event.target.closest("#open-product-filters")) {
     renderProductFilters();
     $("#product-filter-modal")?.classList.remove("hidden");
@@ -6770,8 +7020,10 @@ document.addEventListener("click", async (event) => {
   }
   if (event.target.closest("#buy-product-now")) {
     const product = findProductById(activeProductIndex);
-    if (!product || productSizeStock(product, activeProductSize) <= 0) {
+    activeProductRemark = String($("#product-detail-remark")?.value || "").trim();
+    if (!product || productSizeStock(product, activeProductSize) <= 0 || !isActiveProductFulfillmentReady(product)) {
       event.preventDefault();
+      if (product && productSizeStock(product, activeProductSize) > 0) promptMissingFulfillment(product);
       return;
     }
     prepareCheckoutDraft("buy-now");
@@ -6798,9 +7050,19 @@ document.addEventListener("click", async (event) => {
     activeProductQty = 1;
     syncProductDetailSummary();
   }
+  const productFulfillment = event.target.closest("[data-product-fulfillment]");
+  if (productFulfillment && !productFulfillment.disabled) {
+    const mode = productFulfillment.dataset.productFulfillment;
+    if (mode === "pickup") openProductPickupModal();
+    if (mode === "shipping") openProductShippingModal();
+  }
+  if (event.target.closest("#close-product-pickup-modal")) closeProductPickupModal();
+  if (event.target.closest("#close-product-shipping-modal")) closeProductShippingModal();
+  if (event.target.closest("#confirm-product-shipping")) confirmProductShippingAddress();
+  const pickupDevice = event.target.closest("[data-pickup-device-index]");
+  if (pickupDevice) selectPickupDevice(pickupDevice.dataset.pickupDeviceIndex);
   const productOpen = event.target.closest("[data-product-open]");
   if (productOpen) openProductDetail(productOpen.dataset.productOpen);
-  if (event.target.closest("#save-product-address")) saveProductShippingAddress();
   if (event.target.closest("#add-product-cart")) addProductToCart();
   if (event.target.closest(".reward-redeem")) showToast(lang === "zh" ? "示例奖励已兑换。" : "Sample reward redeemed.");
 
@@ -7314,6 +7576,20 @@ $("#gallery-category-grid")?.addEventListener("change", (event) => {
 $("#product-detail-qty")?.addEventListener("input", (event) => {
   activeProductQty = Math.max(1, Number(event.target.value || 1));
   syncProductDetailSummary();
+});
+
+$("#product-detail-remark")?.addEventListener("input", (event) => {
+  activeProductRemark = String(event.target.value || "");
+});
+
+$("#cart-edit-size")?.addEventListener("change", (event) => {
+  const line = productCart[activeCartEditIndex];
+  const product = line ? findProductById(line.id) : null;
+  const qtyInput = $("#cart-edit-qty");
+  if (!product || !qtyInput) return;
+  const stock = productSizeStock(product, String(event.target.value || "M").toUpperCase());
+  qtyInput.max = String(Math.max(1, stock || 1));
+  qtyInput.value = String(Math.max(1, Math.min(stock || 1, Number(qtyInput.value || 1))));
 });
 
 $("#brush-size").addEventListener("input", (event) => {

@@ -909,6 +909,10 @@
               <span class="product-detail-label" data-i18n="quantity">Quantity</span>
               <input id="product-detail-qty" type="number" min="1" value="1" />
             </label>
+            <label class="product-detail-remark">
+              <span class="product-detail-label" data-i18n="productRemark">Remark</span>
+              <textarea id="product-detail-remark" rows="2"></textarea>
+            </label>
             <div class="product-detail-total-row">
               <span class="product-detail-label" data-i18n="cartTotal">Total</span>
               <strong id="product-detail-total">$0.00</strong>
@@ -922,6 +926,48 @@
             <a class="primary-btn" id="buy-product-now" href="checkout.html" data-i18n="buyNow">Buy</a>
             <button class="ghost-btn" id="add-product-cart" data-i18n="addToCart">Add to Cart</button>
           </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal hidden nested-modal" id="product-pickup-modal">
+      <div class="mini-modal-card">
+        <div class="section-head compact">
+          <h3 data-i18n="selectPickupLocation">Select pickup location</h3>
+          <button class="ghost-btn" id="close-product-pickup-modal">×</button>
+        </div>
+        <div class="pickup-device-list" id="pickup-device-list"></div>
+      </div>
+    </div>
+    <div class="modal hidden nested-modal" id="product-shipping-modal">
+      <div class="mini-modal-card">
+        <div class="section-head compact">
+          <h3 data-i18n="enterShippingAddress">Enter delivery address</h3>
+          <button class="ghost-btn" id="close-product-shipping-modal">×</button>
+        </div>
+        <textarea id="product-shipping-modal-address" rows="4"></textarea>
+        <button class="primary-btn" id="confirm-product-shipping" type="button" data-i18n="saveChanges">Save Changes</button>
+      </div>
+    </div>
+    <div class="modal hidden nested-modal" id="cart-edit-modal">
+      <div class="mini-modal-card">
+        <div class="section-head compact">
+          <h3 data-i18n="cartEdit">Edit</h3>
+          <button class="ghost-btn" id="close-cart-edit-modal">×</button>
+        </div>
+        <div class="cart-edit-body">
+          <label>
+            <span data-i18n="size">Size</span>
+            <select id="cart-edit-size"></select>
+          </label>
+          <label>
+            <span data-i18n="quantity">Quantity</span>
+            <input id="cart-edit-qty" type="number" min="1" value="1" />
+          </label>
+          <label>
+            <span data-i18n="productRemark">Remark</span>
+            <textarea id="cart-edit-remark" rows="3"></textarea>
+          </label>
+          <button class="primary-btn" id="save-cart-edit" type="button" data-i18n="saveChanges">Save Changes</button>
         </div>
       </div>
     </div>

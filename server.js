@@ -2916,13 +2916,14 @@ async function handleGalleryTaxonomy(req, res) {
 async function handlePublicCatalog(req, res) {
   try {
     requirePostgresRuntime("load public catalog");
-    const [taxonomy, templates, materialBases, products, events, community] = await Promise.all([
+    const [taxonomy, templates, materialBases, products, events, community, deviceInfo] = await Promise.all([
       loadPgTaxonomy(),
       loadPgTemplates(),
       loadPgMaterialBases(),
       loadPgProducts(),
       loadPgEvents(),
       loadPgArticles(),
+      safePgRows("SELECT id, equip_id, type, address, status FROM device_info WHERE COALESCE(status, 'active')='active' ORDER BY created_at DESC"),
     ]);
     sendJson(res, 200, {
       ok: true,
@@ -2933,6 +2934,7 @@ async function handlePublicCatalog(req, res) {
         products,
         events,
         community,
+        device_info: deviceInfo,
       },
     }, { "Cache-Control": "no-store" });
   } catch (error) {
