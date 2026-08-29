@@ -123,6 +123,10 @@ const server = http.createServer(async (req, res) => {
       await handleUserPromos(req, res);
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/user/print-records") {
+      await handleUserPrintRecords(req, res);
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/user/update-contact") {
       await handleUserUpdateContact(req, res);
       return;
@@ -433,7 +437,206 @@ async function handleSquareConfig(req, res) {
 async function handleSquarePayment(req, res) {
   const body = await readJson(req);
   const result = await squarePaymentService.createPayment(body);
+  if (result.body?.ok && result.httpStatus >= 200 && result.httpStatus < 300) {
+    try {
+      result.body.order = await createPaidOrderRecord(body, result.body);
+    } catch (error) {
+      result.body.order = {
+        ok: false,
+        service: "orders",
+        operation: "create-paid-order",
+        error: error.message || "Payment succeeded, but order storage failed.",
+      };
+    }
+  }
   sendJson(res, result.httpStatus, result.body);
+}
+
+function makeNumericCode(length = 6) {
+  const max = 10 ** length;
+  return String(crypto.randomInt(0, max)).padStart(length, "0");
+}
+
+function itemLooksPrintable(item = {}, product = {}) {
+  const values = [
+    item.productType,
+    item.product_type,
+    item.printSourceType,
+    item.type,
+    item.name,
+    item.zhName,
+    item.id,
+    product.product_type,
+    product.product_name,
+    product.product_id,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return Boolean(item.isPrintService) || values.includes("print") || values.includes("打印甲") || values.includes("打印");
+}
+
+async function resolveOrderUserId(client, body = {}) {
+  const sessionId = cleanPgText(body.sessionId);
+  if (sessionId) {
+    const session = await getPgAuthSession(sessionId).catch(() => null);
+    if (session?.ok && session.user?.userId) return session.user.userId;
+  }
+  const guestId = `guest_checkout_${crypto.randomUUID().replace(/-/g, "")}`;
+  await client.query(
+    `
+    INSERT INTO users (user_id, username, user_kind, recovery_code, last_seen_at)
+    VALUES ($1, $2, 'guest', $3, CURRENT_TIMESTAMP)
+    ON CONFLICT (user_id) DO NOTHING
+    `,
+    [guestId, `Guest ${guestId.slice(-6)}`, makeRecoveryCode()],
+  );
+  return guestId;
+}
+
+async function notifyManufacturerOrder(payload) {
+  const endpoint = cleanPgText(process.env.MANUFACTURER_ORDER_API_URL);
+  if (!endpoint) return { status: "not_configured", response: "", error: "" };
+  try {
+    const headers = { "Content-Type": "application/json" };
+    const token = cleanPgText(process.env.MANUFACTURER_API_TOKEN);
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const text = await response.text();
+    if (!response.ok) return { status: "failed", response: text.slice(0, 4000), error: `HTTP ${response.status}` };
+    return { status: "synced", response: text.slice(0, 4000), error: "" };
+  } catch (error) {
+    return { status: "failed", response: "", error: error.message || "Manufacturer API request failed." };
+  }
+}
+
+async function ensurePrintServiceProduct(client, items) {
+  if (!items.some((item) => item.isPrintService && String(item.id) === "PRINT-SERVICE")) return null;
+  return (await client.query(
+    `
+    INSERT INTO products (
+      product_id, product_type, product_name, unit_price, product_info,
+      stock_quantity, stock_s, stock_m, stock_l, stock_xl, pickup_method, status
+    )
+    VALUES ('PRINT-SERVICE', 'printing_nail', 'AI Nail Print Service', $1, 'Printable nail order service', 9999, 9999, 9999, 9999, 9999, 'pickup', 'active')
+    ON CONFLICT (product_id) DO UPDATE SET product_type=EXCLUDED.product_type
+    RETURNING product_id, product_type, product_name, unit_price, bound_device_id
+    `,
+    [pgNumber(items.find((item) => item.isPrintService)?.price, 0)],
+  )).rows[0];
+}
+
+async function createPaidOrderRecord(body = {}, payment = {}) {
+  if (!hasPostgresRuntime()) return { ok: false, skipped: true, reason: "DATABASE_URL is not configured." };
+  await ensurePgAdminRuntimeSchema();
+  const items = Array.isArray(body.items) ? body.items.filter((item) => item && item.id).slice(0, 50) : [];
+  if (!items.length) return { ok: false, skipped: true, reason: "No checkout items were supplied." };
+  const client = await pgPool.connect();
+  const orderId = `order_${crypto.randomUUID().replace(/-/g, "")}`;
+  const pickupCode = makeNumericCode(6);
+  let printCode = "";
+  let boundDeviceId = "";
+  let containsPrintable = false;
+  try {
+    await client.query("BEGIN");
+    const userId = await resolveOrderUserId(client, body);
+    const serviceRow = await ensurePrintServiceProduct(client, items);
+    const productRows = (await client.query(
+      `
+      SELECT product_id, product_type, product_name, unit_price, bound_device_id
+      FROM products
+      WHERE product_id = ANY($1::text[])
+      `,
+      [items.map((item) => String(item.id))],
+    )).rows;
+    const rows = serviceRow && !productRows.some((product) => product.product_id === serviceRow.product_id)
+      ? [...productRows, serviceRow]
+      : productRows;
+    const products = new Map(rows.map((product) => [String(product.product_id), product]));
+    containsPrintable = items.some((item) => itemLooksPrintable(item, products.get(String(item.id)) || {}));
+    printCode = containsPrintable ? makeNumericCode(6) : "";
+    boundDeviceId = cleanPgText(items.find((item) => item.pickupDeviceId)?.pickupDeviceId)
+      || cleanPgText(items.find((item) => item.boundDeviceId)?.boundDeviceId)
+      || cleanPgText(rows.find((product) => product.bound_device_id)?.bound_device_id);
+    await client.query(
+      `
+      INSERT INTO orders (
+        order_id, user_id, total_price, pay_method, payment_status, delivery_status, order_status,
+        paid_at, pickup_code, print_code, bound_device_id, payment_provider_id,
+        manufacturer_sync_status
+      )
+      VALUES ($1, $2, $3, 'square', 'paid', $4, 'paid', CURRENT_TIMESTAMP, $5, $6, $7, $8, 'pending')
+      `,
+      [
+        orderId,
+        userId,
+        pgNumber(body.amount || payment.amount),
+        boundDeviceId ? "pickup_pending" : "delivery_pending",
+        pickupCode,
+        printCode,
+        boundDeviceId,
+        cleanPgText(payment.paymentId),
+      ],
+    );
+    for (const item of items) {
+      const product = products.get(String(item.id)) || {};
+      await client.query(
+        `
+        INSERT INTO order_items (order_item_id, order_id, product_id, quantity, unit_price, size, item_snapshot)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `,
+        [
+          `oi_${crypto.randomUUID().replace(/-/g, "")}`,
+          orderId,
+          String(item.id),
+          pgInteger(item.qty || item.quantity, 1),
+          pgNumber(item.price || product.unit_price),
+          cleanPgText(item.size),
+          JSON.stringify(item),
+        ],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const manufacturerPayload = {
+    orderId,
+    paymentId: payment.paymentId || "",
+    paymentStatus: payment.status || "COMPLETED",
+    amount: payment.amount || body.amount,
+    currency: body.currency || payment.currency || "AUD",
+    pickupCode,
+    printCode,
+    containsPrintable,
+    boundDeviceId,
+    orderedAt: new Date().toISOString(),
+    items,
+  };
+  const sync = await notifyManufacturerOrder(manufacturerPayload);
+  await pgPool.query(
+    `
+    UPDATE orders
+    SET manufacturer_sync_status=$1, manufacturer_sync_error=$2, manufacturer_response=$3
+    WHERE order_id=$4
+    `,
+    [sync.status, sync.error, sync.response, orderId],
+  ).catch(() => {});
+  return {
+    ok: true,
+    orderId,
+    pickupCode,
+    printCode,
+    containsPrintable,
+    boundDeviceId,
+    manufacturerSyncStatus: sync.status,
+    manufacturerSyncError: sync.error,
+  };
 }
 
 async function handleAiPreviewCompose(req, res) {
@@ -1137,6 +1340,61 @@ async function handlePgUserPromos(body) {
   return { ok: true, promos };
 }
 
+async function handlePgUserPrintRecords(body) {
+  const session = await getPgAuthSession(body.sessionId);
+  if (!session.ok) return session;
+  await ensurePgAdminRuntimeSchema();
+  const rows = (await pgPool.query(
+    `
+    SELECT
+      o.order_id,
+      o.total_price,
+      o.payment_status,
+      o.delivery_status,
+      o.order_status,
+      o.created_at,
+      o.paid_at,
+      o.pickup_code,
+      o.print_code,
+      o.bound_device_id,
+      o.manufacturer_sync_status,
+      COALESCE(string_agg(DISTINCT p.product_name, ', '), '') AS product_names
+    FROM orders o
+    LEFT JOIN order_items oi ON oi.order_id = o.order_id
+    LEFT JOIN products p ON p.product_id = oi.product_id
+    WHERE o.user_id=$1
+      AND (
+        NULLIF(o.print_code, '') IS NOT NULL
+        OR p.product_type ILIKE '%print%'
+        OR p.product_name ILIKE '%print%'
+        OR p.product_type LIKE '%打印%'
+        OR p.product_name LIKE '%打印%'
+      )
+    GROUP BY o.order_id
+    ORDER BY COALESCE(o.paid_at, o.created_at) DESC
+    LIMIT 80
+    `,
+    [session.user.userId],
+  )).rows;
+  return {
+    ok: true,
+    records: rows.map((item) => ({
+      orderId: item.order_id,
+      productNames: item.product_names || "",
+      totalPrice: Number(item.total_price || 0),
+      paymentStatus: item.payment_status || "",
+      deliveryStatus: item.delivery_status || "",
+      orderStatus: item.order_status || "",
+      createdAt: item.created_at,
+      paidAt: item.paid_at,
+      pickupCode: item.pickup_code || "",
+      printCode: item.print_code || "",
+      boundDeviceId: item.bound_device_id || "",
+      manufacturerSyncStatus: item.manufacturer_sync_status || "",
+    })),
+  };
+}
+
 function formatPgAddress(row) {
   if (!row) return "";
   return [row.receiver_name, row.phone, row.street, row.city, row.state, row.postcode, row.country]
@@ -1520,7 +1778,7 @@ async function handlePgAdminModels() {
     safePgRows("SELECT user_id, username, user_kind, recovery_code, email, phone, gender, created_at, last_seen_at FROM users ORDER BY created_at DESC"),
     safePgRows(`
       SELECT o.order_id, o.user_id, u.username, o.total_price, o.pay_method, o.payment_status,
-             o.delivery_status, o.order_status, o.created_at, o.paid_at
+             o.delivery_status, o.order_status, o.print_code, o.pickup_code, o.created_at, o.paid_at
       FROM orders o
       LEFT JOIN users u ON u.user_id = o.user_id
       ORDER BY o.created_at DESC
@@ -2360,6 +2618,25 @@ async function handleUserPromos(req, res) {
   }
 }
 
+async function handleUserPrintRecords(req, res) {
+  const body = await readJson(req);
+  try {
+    if (hasPostgresRuntime()) {
+      const result = await handlePgUserPrintRecords(body);
+      sendJson(res, result.ok === false ? 401 : 200, result, { "Cache-Control": "no-store" });
+      return;
+    }
+    sendJson(res, 200, { ok: true, records: [], fallback: true }, { "Cache-Control": "no-store" });
+  } catch (error) {
+    sendJson(res, 500, {
+      ok: false,
+      service: "user-print-records",
+      operation: "load",
+      error: error.message || "Failed to load print records.",
+    }, { "Cache-Control": "no-store" });
+  }
+}
+
 async function handleUserUpdateContact(req, res) {
   const body = await readJson(req);
   try {
@@ -2697,6 +2974,32 @@ async function ensurePgAdminRuntimeSchema() {
   if (!hasPostgresRuntime() || pgAdminRuntimeSchemaReady) return;
   await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
   await pgPool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS print_code TEXT");
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_code TEXT NOT NULL DEFAULT '000000'");
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_provider_id TEXT");
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS manufacturer_sync_status TEXT DEFAULT 'not_required'");
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS manufacturer_sync_error TEXT");
+  await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS manufacturer_response TEXT");
+  await pgPool.query("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size TEXT");
+  await pgPool.query("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_snapshot TEXT");
+  await pgPool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'orders_print_code_digits'
+      ) THEN
+        ALTER TABLE orders ADD CONSTRAINT orders_print_code_digits
+        CHECK (print_code IS NULL OR print_code ~ '^[0-9]{6}$');
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'orders_pickup_code_digits'
+      ) THEN
+        ALTER TABLE orders ADD CONSTRAINT orders_pickup_code_digits
+        CHECK (pickup_code ~ '^[0-9]+$');
+      END IF;
+    END $$;
+  `);
   pgAdminRuntimeSchemaReady = true;
 }
 
@@ -2860,7 +3163,20 @@ async function loadPgMaterialBases() {
     FROM templates t
     LEFT JOIN assets a ON a.asset_id = COALESCE(t.cover_asset_id, t.image_asset_id)
     WHERE t.source_type='official'
-      AND (t.template_id LIKE 'official_%_printing-nail-%' OR t.material_type LIKE 'm%')
+      AND COALESCE(t.status, 'active')='active'
+      AND (
+        t.template_id LIKE '%123%'
+        OR t.template_id LIKE '%124%'
+        OR t.template_id LIKE '%125%'
+        OR t.template_id LIKE '%126%'
+        OR t.template_id LIKE '%127%'
+        OR t.template_id LIKE '%128%'
+        OR t.template_id LIKE '%129%'
+        OR t.template_id LIKE '%130%'
+        OR t.template_id LIKE 'official_%_printing-nail-%'
+        OR t.material_type IS NOT NULL
+        OR t.design_type IN ('nail', 'printing_nail', 'printable_nail', '甲片')
+      )
     ORDER BY COALESCE(t.updated_at, t.created_at) DESC
   `);
   return items.map((item) => {

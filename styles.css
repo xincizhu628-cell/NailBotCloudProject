@@ -5915,6 +5915,131 @@ select {
   display: none;
 }
 
+.print-order-entry {
+  width: 100%;
+  min-height: 126px;
+  margin: 18px 0 20px;
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: minmax(120px, 0.25fr) 1fr;
+  gap: 18px;
+  align-items: center;
+  text-align: left;
+  border: 1px solid rgba(229, 86, 147, 0.24);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(255,239,248,0.82));
+  box-shadow: 0 14px 36px rgba(229, 86, 147, 0.11);
+  cursor: pointer;
+}
+
+.print-order-entry-art {
+  min-height: 92px;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255,255,255,0.92) 0 18px, transparent 19px),
+    linear-gradient(145deg, rgba(229,86,147,0.62), rgba(140,124,255,0.52));
+}
+
+.print-order-entry-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.print-order-entry-copy em {
+  color: var(--accent);
+  font-style: normal;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.print-order-entry-copy strong {
+  color: var(--ink);
+  font-size: clamp(1.25rem, 2vw, 2rem);
+  font-weight: 700;
+}
+
+.print-order-entry-copy small {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.print-order-card,
+.print-order-create-card {
+  position: relative;
+  width: min(720px, calc(100vw - 28px));
+  max-height: min(86vh, 760px);
+  overflow: auto;
+  padding: 24px;
+  border-radius: 10px;
+  background: rgba(255, 252, 255, 0.98);
+  border: 1px solid rgba(229, 86, 147, 0.18);
+  box-shadow: var(--shadow);
+}
+
+.print-order-create {
+  width: 100%;
+  min-height: 54px;
+  margin: 12px 0;
+  font-size: 1.05rem;
+}
+
+.print-records-panel {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(229, 86, 147, 0.16);
+}
+
+.print-record-list {
+  display: grid;
+  gap: 10px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.print-record-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(229, 86, 147, 0.16);
+  background: rgba(255,255,255,0.82);
+}
+
+.print-record-row strong {
+  color: var(--ink);
+}
+
+.print-record-row span,
+.print-record-row small,
+.print-record-row em {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-style: normal;
+}
+
+.print-order-create-card {
+  width: min(460px, calc(100vw - 28px));
+  display: grid;
+  gap: 14px;
+}
+
+.print-order-create-card label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.print-order-create-card select {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(45, 35, 48, 0.12);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
 .toast {
   position: fixed;
   right: 22px;

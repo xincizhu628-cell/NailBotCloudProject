@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=128" />
+    <link rel="stylesheet" href="styles.css?v=129" />
   </head>
   <body>
     <div class="app-shell">
@@ -214,6 +214,15 @@
                 </button>
               </header>
 
+              <button class="print-order-entry" id="open-print-order-entry" type="button">
+                <span class="print-order-entry-art" aria-hidden="true"></span>
+                <span class="print-order-entry-copy">
+                  <em>Print order</em>
+                  <strong>下单获取打印码</strong>
+                  <small>选择材质和设备，支付成功后自动生成打印码/取货码。</small>
+                </span>
+              </button>
+
               <div class="print-guide-frame">
                 <div class="print-guide-steps">
                   <article class="print-guide-step">
@@ -417,6 +426,7 @@
                   <button class="ghost-btn" id="exit-design" data-i18n="exitDesign">Exit</button>
                   <button class="ghost-btn" id="save-design" data-i18n="saveDesign">Save Design</button>
                   <button class="ghost-btn" id="export-design" data-i18n="exportDesign">Export Design</button>
+                  <button class="ghost-btn" id="print-design" data-i18n="printTemplateAction">Print</button>
                 </footer>
                 </div>
               </section>
@@ -828,6 +838,51 @@
         </div>
       </div>
     </div>
+    <div class="modal hidden" id="print-order-modal">
+      <div class="print-order-card">
+        <button class="template-detail-close" id="close-print-order-modal" type="button" aria-label="Close">X</button>
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Print order</p>
+            <h3>下单获取打印码</h3>
+          </div>
+        </div>
+        <button class="primary-btn print-order-create" id="open-print-order-create" type="button">创建打印甲订单</button>
+        <p class="muted" id="print-order-context">请选择一个画布或模板进行打印。</p>
+        <section class="print-records-panel">
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">Print records</p>
+              <h3>我的打印记录</h3>
+            </div>
+          </div>
+          <div class="print-record-list" id="print-record-list">
+            <p class="muted">Loading...</p>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div class="modal hidden" id="print-order-create-modal">
+      <div class="print-order-create-card">
+        <button class="template-detail-close" id="close-print-order-create" type="button" aria-label="Close">X</button>
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Print setup</p>
+            <h3>选择打印材质和设备</h3>
+          </div>
+        </div>
+        <label>
+          <span>打印甲材质</span>
+          <select id="print-order-material"></select>
+        </label>
+        <label>
+          <span>打印设备</span>
+          <select id="print-order-device"></select>
+        </label>
+        <p class="muted" id="print-order-create-status"></p>
+        <button class="primary-btn" id="confirm-print-order" type="button">去支付</button>
+      </div>
+    </div>
     <div class="modal hidden" id="coupon-modal">
       <div class="coupon-card">
         <div class="section-head compact">
@@ -1025,7 +1080,7 @@
         <button class="eyedropper-btn" id="eyedropper-btn" title="Eyedropper">◎</button>
       </div>
     </div>
-    <script src="app.js?v=114"></script>
+    <script src="app.js?v=116"></script>
   </body>
 </html>
 

@@ -630,6 +630,7 @@ let templateLoadObserver = null;
 let productImageObserver = null;
 const productCart = [];
 const CHECKOUT_DRAFT_KEY = "nailStudioCheckoutDraftV1";
+const PRINT_CONTEXT_KEY = "nailStudioPrintContextV1";
 const PRODUCT_CART_KEY = "nailStudioProductCartV1";
 const PRODUCT_TEMP_ADDRESS_KEY = "nailStudioTempShippingAddressV1";
 const USER_AUTH_SESSION_KEY = "nailStudioUserAuthSessionV1";
@@ -909,6 +910,16 @@ const t = (key) => dictionary[lang][key] || key;
 const local = (item, key, zhKey) => (lang === "zh" ? item[zhKey] : item[key]);
 const paintCanvas = () => $("#nail-canvas");
 const assetCanvas = () => $("#asset-canvas");
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  }[char]));
+}
 
 let isDrawing = false;
 let lastPoint = null;
@@ -1818,9 +1829,16 @@ function useTemplateForPrint(index = activeTemplateIndex, scope = activeTemplate
   const design = renderedTemplateByScope(scope, index);
   if (!design) return;
   const meta = templateMeta(design, index);
+  rememberPrintContext({
+    sourceType: "template",
+    templateId: meta.id,
+    materialId: normalizeMaterialId(design.materialType || design.material_type || currentFinger().material || "m123"),
+    image: templateImageSource(design) || "",
+    title: local(design, "name", "zhName") || meta.id,
+  });
   closeTemplateDetail();
   activateView("design");
-  $("#design-view .tab[data-tab='printcode']")?.click();
+  activateDesignTab("printcode");
   $("#print-template-preview").classList.remove("hidden");
   const printImage = $("#print-template-image");
   printImage.className = `print-template-image template-shape shape-${meta.shapeKey}`;
@@ -1828,6 +1846,240 @@ function useTemplateForPrint(index = activeTemplateIndex, scope = activeTemplate
   $("#print-template-name").textContent = local(design, "name", "zhName");
   $("#print-template-meta").textContent = `${meta.id} · ${meta.shape}`;
   $("#print-status").textContent = lang === "zh" ? "模板已载入，可预览并打印。" : "Template loaded for preview and print.";
+  openPrintOrderModal();
+}
+
+function normalizeMaterialId(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return "m123";
+  const number = text.match(/12[3-9]|130/)?.[0];
+  if (number) return `m${number}`;
+  if (materialLabelMap[text]) return text;
+  return text.startsWith("m") ? text : "m123";
+}
+
+function currentCanvasPrintContext() {
+  saveCurrentCanvas();
+  return {
+    sourceType: "canvas",
+    templateId: `CANVAS-${Date.now()}`,
+    materialId: normalizeMaterialId(currentFinger().material || fingerDesigns.thumb?.material || "m123"),
+    image: combinedDesignDataUrl(420, 760, "image/png"),
+    title: lang === "zh" ? "当前画布设计" : "Current canvas design",
+    finger: designerState.finger,
+  };
+}
+
+function rememberPrintContext(context = {}) {
+  const next = {
+    sourceType: context.sourceType || "manual",
+    templateId: context.templateId || "",
+    materialId: normalizeMaterialId(context.materialId || currentFinger().material || "m123"),
+    image: context.image || "",
+    title: context.title || (lang === "zh" ? "打印订单" : "Print order"),
+    finger: context.finger || designerState.finger || "",
+    savedAt: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(PRINT_CONTEXT_KEY, JSON.stringify(next));
+  } catch (error) {
+    console.warn("[print] Failed to store print context", error);
+  }
+  return next;
+}
+
+function storedPrintContext() {
+  try {
+    return JSON.parse(localStorage.getItem(PRINT_CONTEXT_KEY) || "null") || null;
+  } catch {
+    return null;
+  }
+}
+
+function activePrintContext() {
+  return storedPrintContext() || rememberPrintContext({
+    sourceType: "manual",
+    materialId: currentFinger().material || "m123",
+    title: lang === "zh" ? "手动打印订单" : "Manual print order",
+  });
+}
+
+function printableProducts() {
+  const products = productItems();
+  const matches = products.filter((product) => {
+    const text = [product.id, product.name, product.zhName, product.productType, product.tags?.join(" ")].filter(Boolean).join(" ").toLowerCase();
+    return text.includes("print") || text.includes("打印");
+  });
+  return matches.length ? matches : [{
+    id: "PRINT-SERVICE",
+    name: "AI Nail Print Service",
+    zhName: "AI美甲打印服务",
+    productType: "printing_nail",
+    price: 0,
+    image: "",
+    boundDeviceId: "",
+  }];
+}
+
+function printMaterialOptions() {
+  const taxonomy = publicCatalog?.taxonomy || fallbackGalleryTaxonomy;
+  const materialItems = Array.isArray(taxonomy.materials) && taxonomy.materials.length ? taxonomy.materials : [];
+  const options = materialItems.map((item) => ({
+    id: normalizeMaterialId(item.id || item.value || item.name),
+    label: productLabel(item),
+  }));
+  Object.entries(materialLabelMap).forEach(([id, label]) => {
+    if (!options.some((item) => item.id === id)) options.push({ id, label });
+  });
+  return options;
+}
+
+function printerDevices() {
+  const rows = Array.isArray(publicCatalog?.device_info) ? publicCatalog.device_info : [];
+  const hosts = rows.filter((item) => {
+    const type = String(item.type || "").toLowerCase();
+    return type.includes("host") || type.includes("主机") || type.includes("main");
+  });
+  if (hosts.length) return hosts;
+  return [
+    { id: "boxhill-1", equip_id: "Boxhill1", address: "Boxhill pickup kiosk" },
+    { id: "boxhill-2", equip_id: "Boxhill2", address: "Boxhill pickup kiosk" },
+    { id: "chadstone-maita", equip_id: "Chadstone Maita", address: "Chadstone Maita pickup kiosk" },
+    { id: "dfo-south-wharf", equip_id: "DFO South Wharf", address: "DFO South Wharf pickup kiosk" },
+  ];
+}
+
+function openPrintOrderModal(context = null) {
+  if (context) rememberPrintContext(context);
+  const modal = $("#print-order-modal");
+  if (!modal) return;
+  const active = activePrintContext();
+  const contextNode = $("#print-order-context");
+  if (contextNode) {
+    contextNode.textContent = active.templateId
+      ? `${lang === "zh" ? "打印来源" : "Print source"}: ${active.title || active.templateId} · ${active.materialId}`
+      : (lang === "zh" ? "可直接创建打印甲订单，或从画布/模板带入设计后打印。" : "Create a print order directly, or open one from a canvas/template.");
+  }
+  modal.classList.remove("hidden");
+  renderPrintRecords();
+}
+
+function closePrintOrderModal() {
+  $("#print-order-modal")?.classList.add("hidden");
+}
+
+function openPrintOrderCreateModal() {
+  const context = activePrintContext();
+  const materialSelect = $("#print-order-material");
+  const deviceSelect = $("#print-order-device");
+  if (materialSelect) {
+    const activeMaterial = normalizeMaterialId(context.materialId || "m123");
+    materialSelect.innerHTML = printMaterialOptions().map((item) => (
+      `<option value="${escapeHtml(item.id)}" ${item.id === activeMaterial ? "selected" : ""}>${escapeHtml(item.label)}</option>`
+    )).join("");
+  }
+  if (deviceSelect) {
+    const devices = printerDevices();
+    deviceSelect.innerHTML = devices.length
+      ? devices.map((device) => `<option value="${escapeHtml(device.equip_id || device.id || "")}">${escapeHtml(pickupDeviceLabel(device))}</option>`).join("")
+      : `<option value="">${lang === "zh" ? "暂无可用设备" : "No device available"}</option>`;
+  }
+  $("#print-order-create-status").textContent = "";
+  $("#print-order-create-modal")?.classList.remove("hidden");
+}
+
+function closePrintOrderCreateModal() {
+  $("#print-order-create-modal")?.classList.add("hidden");
+}
+
+function preparePrintCheckout() {
+  const product = printableProducts()[0];
+  const materialId = $("#print-order-material")?.value || activePrintContext().materialId || "m123";
+  const deviceId = $("#print-order-device")?.value || "";
+  const device = printerDevices().find((item) => String(item.equip_id || item.id) === String(deviceId)) || null;
+  const context = rememberPrintContext({ ...activePrintContext(), materialId });
+  const price = Number(product.price || 0);
+  const item = {
+    id: product.id,
+    qty: 1,
+    size: "PRINT",
+    name: product.name || "AI Nail Print Service",
+    zhName: product.zhName || "AI美甲打印服务",
+    price,
+    image: context.image || product.image || "",
+    productType: product.productType || "printing_nail",
+    tags: ["print", materialId].filter(Boolean),
+    materialId,
+    templateId: context.templateId || "",
+    printSourceType: context.sourceType || "manual",
+    isPrintService: true,
+    fulfillmentMode: "pickup",
+    pickupDeviceId: deviceId,
+    pickupLabel: device ? pickupDeviceLabel(device) : deviceId,
+    boundDeviceId: deviceId,
+    remark: `Print source: ${context.templateId || context.sourceType}; material: ${materialId}`,
+  };
+  const draft = {
+    mode: "print-order",
+    createdAt: new Date().toISOString(),
+    currency: "AUD",
+    items: [item],
+    subtotal: price,
+    discount: 0,
+    total: price,
+    printContext: context,
+  };
+  try {
+    localStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(draft));
+  } catch (error) {
+    console.warn("[print] Failed to store checkout draft", error);
+  }
+  return draft;
+}
+
+function confirmPrintOrder() {
+  if (!$("#print-order-device")?.value) {
+    $("#print-order-create-status").textContent = lang === "zh" ? "请选择打印设备。" : "Please select a printer device.";
+    return;
+  }
+  preparePrintCheckout();
+  window.location.href = "checkout.html";
+}
+
+async function renderPrintRecords() {
+  const list = $("#print-record-list");
+  if (!list) return;
+  const sessionId = storedAuthSessionId();
+  if (!sessionId) {
+    list.innerHTML = `<p class="muted">${lang === "zh" ? "登录后可查看打印记录。" : "Login to view print records."}</p>`;
+    return;
+  }
+  list.innerHTML = `<p class="muted">${lang === "zh" ? "正在读取打印记录..." : "Loading print records..."}</p>`;
+  try {
+    const response = await fetch("/api/user/print-records", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ sessionId }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.ok === false) throw new Error(payload.error || "Failed to load print records.");
+    const records = Array.isArray(payload.records) ? payload.records : [];
+    if (!records.length) {
+      list.innerHTML = `<p class="muted">${lang === "zh" ? "暂时没有打印甲订单记录。" : "No print orders yet."}</p>`;
+      return;
+    }
+    list.innerHTML = records.map((record) => `
+      <article class="print-record-row">
+        <strong>${escapeHtml(record.productNames || record.orderId)}</strong>
+        <span>${escapeHtml(record.createdAt ? String(record.createdAt).slice(0, 10) : "")}</span>
+        <small>Print: ${escapeHtml(record.printCode || "-")} · Pickup: ${escapeHtml(record.pickupCode || "-")}</small>
+        <em>${escapeHtml(record.boundDeviceId || "")} ${escapeHtml(record.manufacturerSyncStatus || "")}</em>
+      </article>
+    `).join("");
+  } catch (error) {
+    list.innerHTML = `<p class="muted">${escapeHtml(error.message || "Failed to load print records.")}</p>`;
+  }
 }
 
 function setAiWorkflowStep(step) {
@@ -2662,6 +2914,7 @@ function productItems() {
       stock: Number(item.stock_quantity || 0),
       sizeStocks,
       isFeatured: item.is_featured ?? item.IS_FEATURED ?? item.featured ?? 0,
+      boundDeviceId: item.bound_device_id || item.boundDeviceId || item.device_id || "",
       pickupMethod: item.pickup_method || item.delivery_mode || item.fulfillment_mode || "both",
       deliveryMode: item.delivery_mode || item.pickup_method || item.fulfillment_mode || "both",
       supportsPickup: truthyFlag(item.supports_pickup ?? true),
@@ -3159,8 +3412,13 @@ function materialCategoryMatch(template, materialId) {
     template.id,
     template.template_id,
     template.name,
+    template.zhName,
+    template.template_name,
+    template.template_title,
     template.material_type,
     template.material_categories,
+    template.image_url,
+    ...(Array.isArray(template.image_list) ? template.image_list : []),
     ...(Array.isArray(template.category_ids) ? template.category_ids : []),
   ].filter(Boolean).join("|").toLowerCase();
   return values.includes(materialKey) || values.includes(materialNumber) || values.includes(materialName.toLowerCase());
@@ -4039,6 +4297,8 @@ function checkoutSnapshot(mode = "cart") {
       tags: Array.isArray(product.tags) ? product.tags.slice(0, 6) : [],
       shape: product.shape || "",
       style: product.style || "",
+      productType: product.productType || "",
+      boundDeviceId: product.boundDeviceId || "",
       fulfillmentMode: line.fulfillmentMode || "",
       pickupDeviceId: line.pickupDeviceId || "",
       pickupLabel: line.pickupLabel || "",
@@ -4229,19 +4489,41 @@ function fulfillmentMode(product) {
 
 function productFulfillmentAvailability(product) {
   const mode = fulfillmentMode(product);
+  const hasPickupDevice = !productBoundDeviceIds(product).length || pickupDevices(product).length > 0;
   return {
-    pickup: mode === "pickup" || mode === "both",
+    pickup: (mode === "pickup" || mode === "both") && hasPickupDevice,
     shipping: mode === "shipping" || mode === "both",
   };
 }
 
-function pickupDevices() {
+function productBoundDeviceIds(product) {
+  const raw = product?.boundDeviceId || product?.bound_device_id || product?.deviceId || product?.device_id || "";
+  return String(raw)
+    .split(/[,/|;，、]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function deviceMatchesBoundId(device, boundId) {
+  const normalized = String(boundId || "").trim().toLowerCase();
+  if (!normalized) return false;
+  return [
+    device?.equip_id,
+    device?.id,
+    device?.device_id,
+    device?.deviceId,
+  ].some((value) => String(value || "").trim().toLowerCase() === normalized);
+}
+
+function pickupDevices(product = findProductById(activeProductIndex)) {
   const rows = Array.isArray(publicCatalog?.device_info) ? publicCatalog.device_info : [];
   const hostRows = rows.filter((item) => {
     const type = String(item.type || "").toLowerCase();
     return type.includes("host") || type.includes("主机") || type.includes("main");
   });
   const source = hostRows.length ? hostRows : rows;
+  const boundIds = productBoundDeviceIds(product);
+  if (boundIds.length) return source.filter((device) => boundIds.some((id) => deviceMatchesBoundId(device, id)));
   if (source.length) return source;
   return [
     { id: "boxhill-1", equip_id: "Boxhill1", address: "Boxhill pickup kiosk" },
@@ -4351,13 +4633,14 @@ function confirmProductShippingAddress() {
 function openProductPickupModal() {
   const list = $("#pickup-device-list");
   if (!list) return;
-  const devices = pickupDevices();
-  list.innerHTML = devices.map((device, index) => `
+  const product = findProductById(activeProductIndex);
+  const devices = pickupDevices(product);
+  list.innerHTML = devices.length ? devices.map((device, index) => `
     <button type="button" data-pickup-device-index="${index}">
       <strong>${escapeAttribute(device.equip_id || device.id || `Device ${index + 1}`)}</strong>
       <small>${escapeAttribute(device.address || "")}</small>
     </button>
-  `).join("");
+  `).join("") : `<p class="muted">${lang === "zh" ? "该商品暂未绑定可自取设备。" : "No pickup device is bound to this product."}</p>`;
   $("#product-pickup-modal")?.classList.remove("hidden");
 }
 
@@ -4366,7 +4649,7 @@ function closeProductPickupModal() {
 }
 
 function selectPickupDevice(index) {
-  const device = pickupDevices()[Number(index)];
+  const device = pickupDevices(findProductById(activeProductIndex))[Number(index)];
   if (!device) return;
   activeProductFulfillmentMode = "pickup";
   activeProductPickupDevice = device;
@@ -7186,6 +7469,11 @@ document.addEventListener("click", async (event) => {
   }
   if (event.target.closest("#use-template-canvas")) useTemplateInCanvas();
   if (event.target.closest("#use-template-print")) useTemplateForPrint();
+  if (event.target.closest("#open-print-order-entry")) openPrintOrderModal();
+  if (event.target.closest("#close-print-order-modal")) closePrintOrderModal();
+  if (event.target.closest("#open-print-order-create")) openPrintOrderCreateModal();
+  if (event.target.closest("#close-print-order-create")) closePrintOrderCreateModal();
+  if (event.target.closest("#confirm-print-order")) confirmPrintOrder();
   const aiOpen = event.target.closest("[data-ai-flow]");
   if (aiOpen) openAiWorkflow(aiOpen.dataset.aiFlow);
   if (event.target.closest("#close-ai-workflow")) closeAiWorkflow();
@@ -7248,9 +7536,11 @@ document.addEventListener("click", async (event) => {
     $("#template-comment-input")?.focus();
   }
   if (event.target.closest("#print-template-action")) {
-    $("#print-status").textContent = lang === "zh" ? "打印任务已发送到美甲机预览队列。" : "Print job sent to the nail printer preview queue.";
-    showToast($("#print-status").textContent);
     const design = renderedTemplateByScope();
+    if (design && activeTemplateIndex !== null) useTemplateForPrint(activeTemplateIndex, activeTemplateScope);
+    else openPrintOrderModal();
+    $("#print-status").textContent = lang === "zh" ? "请确认材质和设备后进入支付。" : "Confirm material and device before checkout.";
+    showToast($("#print-status").textContent);
     if (design && activeTemplateIndex !== null) {
       recordUserAction("template", templateActionTarget(design, activeTemplateIndex), "print");
     }
@@ -7471,6 +7761,11 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("#activate-print-code")) {
     $("#print-status").textContent = t("printActivated");
     showToast(t("printActivated"));
+  }
+  if (event.target.closest("#print-design")) {
+    const context = currentCanvasPrintContext();
+    activateDesignTab("printcode");
+    openPrintOrderModal(context);
   }
 
   if (event.target.closest("[data-jump='tasks']")) {
