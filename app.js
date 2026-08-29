@@ -3426,17 +3426,42 @@ function materialCategoryMatch(template, materialId) {
   return values.includes(materialKey) || values.includes(materialNumber) || values.includes(materialName.toLowerCase());
 }
 
-function materialFingerFromTemplate(template) {
-  const values = [
+function materialNumberForId(materialId) {
+  return String(materialId || "").toLowerCase().match(/(?:m)?(12[3-9]|130)/)?.[1] || "";
+}
+
+function materialBaseLookupText(template) {
+  const imageRefs = templateImageList(template)
+    .filter((src) => src && !String(src).startsWith("data:"))
+    .map((src) => String(src).slice(-220));
+  return [
     template?.id,
     template?.template_id,
     template?.name,
     template?.zhName,
     template?.template_name,
     template?.template_title,
+    template?.material_type,
+    template?.material_categories,
     template?.image_url,
-    ...(Array.isArray(template?.image_list) ? template.image_list : []),
+    ...(Array.isArray(template?.category_ids) ? template.category_ids : []),
+    ...imageRefs,
   ].filter(Boolean).join("|").toLowerCase();
+}
+
+function materialFingerOrderNumber(template, materialId = "") {
+  const values = materialBaseLookupText(template);
+  const materialNumber = materialNumberForId(materialId) || values.match(/(?:^|[^0-9])(12[3-9]|130)(?:[^0-9]|$)/)?.[1] || "";
+  const escaped = materialNumber.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const numbered = escaped
+    ? values.match(new RegExp(`${escaped}\\s*(?:--|-|_|\\s)+\\s*(10|[1-9])(?:[^0-9]|$)`))
+    : null;
+  const generic = numbered || values.match(/(?:finger|nail|指|甲)\s*(10|[1-9])(?:[^0-9]|$)/);
+  return generic ? Number(generic[1]) : 0;
+}
+
+function materialFingerFromTemplate(template, materialId = "") {
+  const values = materialBaseLookupText(template);
   const named = [
     ["thumb", ["thumb", "大拇指", "拇指"]],
     ["index", ["index", "食指"]],
@@ -3445,29 +3470,40 @@ function materialFingerFromTemplate(template) {
     ["pinky", ["pinky", "little", "小指"]],
   ].find(([, aliases]) => aliases.some((alias) => values.includes(alias)));
   if (named) return named[0];
-  const orderMatch = values.match(/(?:^|[^0-9])(?:finger)?([1-5])(?:[^0-9]|$)/);
-  if (orderMatch) return fingers[Number(orderMatch[1]) - 1] || "";
+  const order = materialFingerOrderNumber(template, materialId);
+  if (order) return fingers[(order - 1) % fingers.length] || "";
   return "";
+}
+
+function materialBaseCandidateRank(template, materialId) {
+  const images = templateImageList(template);
+  if (!images.length) return 999;
+  const values = materialBaseLookupText(template);
+  const order = materialFingerOrderNumber(template, materialId);
+  if (order) return order > fingers.length ? order + 20 : order;
+  if (images.length >= fingers.length && /^material_/i.test(String(template?.template_id || template?.id || ""))) return 40;
+  if (images.length >= fingers.length && /(cutout|single|单甲|抠图|底图|nail-base|material-base)/i.test(values)) return 45;
+  return 999;
 }
 
 function officialMaterialTemplateSet(materialId) {
   const templates = ((publicCatalog?.material_bases?.length ? publicCatalog.material_bases : publicCatalog?.templates) || [])
-    .filter((item) => item.source_type === "official" && materialCategoryMatch(item, materialId) && templateImageList(item).length);
+    .filter((item) => item.source_type === "official" && materialCategoryMatch(item, materialId) && templateImageList(item).length)
+    .map((item, index) => ({ item, index, rank: materialBaseCandidateRank(item, materialId) }))
+    .filter((entry) => entry.rank < 999)
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.item);
   const multiImageTemplate = templates.find((item) => templateImageList(item).length >= fingers.length);
   if (multiImageTemplate) {
     return Object.fromEntries(fingers.map((finger) => [finger, multiImageTemplate]));
   }
   const byFinger = new Map();
-  const byShape = new Map();
   templates.forEach((item) => {
-    const finger = materialFingerFromTemplate(item);
+    const finger = materialFingerFromTemplate(item, materialId);
     if (finger && !byFinger.has(finger)) byFinger.set(finger, item);
-    const shape = String(item.nail_shape || "").trim();
-    if (shape && !byShape.has(shape)) byShape.set(shape, item);
   });
   return Object.fromEntries(fingers.map((finger) => {
-    const shape = fixedShapeForFinger(finger);
-    const match = byFinger.get(finger) || byShape.get(shape) || templates.find((item) => templateImageSource(item));
+    const match = byFinger.get(finger);
     return [finger, match || null];
   }));
 }
