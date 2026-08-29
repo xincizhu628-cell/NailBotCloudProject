@@ -763,7 +763,16 @@ const materialLabelMap = {
   m130: "130 Rhinestone Cat Eye",
 };
 const transparentPixel = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
-const officialMaterialBaseMap = {};
+const localMaterialBaseMap = Object.fromEntries(
+  Object.keys(materialLabelMap).map((materialId) => {
+    const materialNumber = materialId.replace(/^m/, "");
+    return [
+      materialId,
+      fingers.map((_, index) => `assets/materials/generated-nail-cutouts/material-${materialNumber}-finger-${index + 1}.png`),
+    ];
+  }),
+);
+const officialMaterialBaseMap = { ...localMaterialBaseMap };
 const PERSONAL_DESIGNS_KEY = "nailStudioPersonalDesigns";
 const USER_SESSION_KEY = "nailStudioUserSession";
 const AUTO_DRAFT_TEMPLATE_ID = "AUTO-DRAFT-D2-CANVAS";
@@ -3449,6 +3458,11 @@ function materialBaseLookupText(template) {
   ].filter(Boolean).join("|").toLowerCase();
 }
 
+function materialImageSourceIsUsable(source) {
+  const text = String(source || "").trim();
+  return Boolean(text) && !/\/api\/admin\/product-image/i.test(text);
+}
+
 function materialFingerOrderNumber(template, materialId = "") {
   const values = materialBaseLookupText(template);
   const materialNumber = materialNumberForId(materialId) || values.match(/(?:^|[^0-9])(12[3-9]|130)(?:[^0-9]|$)/)?.[1] || "";
@@ -3476,7 +3490,7 @@ function materialFingerFromTemplate(template, materialId = "") {
 }
 
 function materialBaseCandidateRank(template, materialId) {
-  const images = templateImageList(template);
+  const images = templateImageList(template).filter(materialImageSourceIsUsable);
   if (!images.length) return 999;
   const values = materialBaseLookupText(template);
   const order = materialFingerOrderNumber(template, materialId);
@@ -3509,7 +3523,7 @@ function officialMaterialTemplateSet(materialId) {
 }
 
 function templateFingerImageSource(template, finger) {
-  const images = templateImageList(template);
+  const images = templateImageList(template).filter(materialImageSourceIsUsable);
   if (!images.length) return "";
   const fingerIndex = Math.max(0, fingers.indexOf(finger));
   return images[fingerIndex] || images[0] || "";
