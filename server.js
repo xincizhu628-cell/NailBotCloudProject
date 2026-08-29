@@ -26,6 +26,7 @@ const defaultArkEditBaseUrl = process.env.ARK_EDIT_BASE_URL || "https://ark.cn-b
 const defaultArkEditEndpoint = process.env.ARK_EDIT_ENDPOINT || `${defaultArkEditBaseUrl.replace(/\/+$/, "")}/images/generations`;
 const maxJsonBodyBytes = 256 * 1024 * 1024;
 const adminCookieName = "nail_admin_session";
+let pgAdminRuntimeSchemaReady = false;
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -1487,10 +1488,13 @@ function adminModel(title, idKey, rows, extra = {}) {
     fields: extra.fields || [],
     rows,
     ...(extra.kindKey ? { kindKey: extra.kindKey } : {}),
+    ...(extra.productFields ? { productFields: extra.productFields } : {}),
+    ...(extra.rewardFields ? { rewardFields: extra.rewardFields } : {}),
   };
 }
 
 async function handlePgAdminModels() {
+  await ensurePgAdminRuntimeSchema();
   const [
     taxonomy,
     templates,
@@ -1573,6 +1577,7 @@ async function handlePgAdminModels() {
     info: item.product_info,
     nail_shape: item.nail_shape,
     style_tags: item.style_tags,
+    bound_device_id: item.bound_device_id || "",
     price_or_points: item.unit_price,
     stock_quantity: item.stock_quantity,
     stock_s: item.stock_s,
@@ -1596,6 +1601,7 @@ async function handlePgAdminModels() {
     info: item.reward_info,
     nail_shape: "",
     style_tags: "",
+    bound_device_id: item.bound_device_id || "",
     price_or_points: item.unit_point_cost,
     stock_quantity: item.stock_quantity,
     stock_s: item.stock_s,
@@ -1607,12 +1613,56 @@ async function handlePgAdminModels() {
     is_featured: item.is_featured,
     status: item.status,
   }));
+  const statusOptions = [
+    { value: "active", label: "active" },
+    { value: "draft", label: "draft" },
+    { value: "hidden", label: "hidden" },
+  ];
+  const shapeOptions = [{ value: "", label: "Not selected" }, ...(taxonomy.shapes || []).map((item) => ({ value: item.name, label: item.name }))];
+  const styleOptions = [{ value: "", label: "Null" }, ...(taxonomy.styles || []).map((item) => ({ value: item.name, label: item.name }))];
+  const mainDeviceOptions = [{ value: "", label: "Not bound" }, ...deviceInfo
+    .filter((item) => ["主机", "main_unit"].includes(String(item.type || "")) && String(item.status || "active") === "active")
+    .map((item) => ({ value: item.equip_id, label: `${item.equip_id} · ${item.address || "No address"}` }))];
   return {
     ok: true,
     models: {
       product: adminModel("Official Product / Reward Library", "id", [...productRows, ...rewardRows], {
         kindKey: "item_kind",
-        columns: ["item_kind", "id", "name", "type", "nail_shape", "price_or_points", "stock_by_size", "pickup_method", "is_featured", "status"],
+        columns: ["item_kind", "id", "name", "type", "nail_shape", "bound_device_id", "price_or_points", "stock_by_size", "pickup_method", "is_featured", "status"],
+        productFields: [
+          { name: "product_name", label: "Product name", type: "text" },
+          { name: "product_type", label: "Product type", type: "select", options: [{ value: "穿戴甲", label: "穿戴甲" }, { value: "打印甲", label: "打印甲" }, { value: "配件", label: "配件" }] },
+          { name: "unit_price", label: "Unit price", type: "number" },
+          { name: "nail_shape", label: "Nail shape", type: "select", options: shapeOptions },
+          { name: "style_tags", label: "Style", type: "select", options: styleOptions },
+          { name: "bound_device_id", label: "绑定设备", type: "select", options: mainDeviceOptions },
+          { name: "stock_s", label: "Stock S", type: "number" },
+          { name: "stock_m", label: "Stock M", type: "number" },
+          { name: "stock_l", label: "Stock L", type: "number" },
+          { name: "stock_xl", label: "Stock XL", type: "number" },
+          { name: "is_featured", label: "是否精品", type: "select", options: [{ value: "0", label: "No" }, { value: "1", label: "Yes" }] },
+          { name: "pickup_method", label: "支持取货方式", type: "select", options: [{ value: "pickup", label: "自取" }, { value: "shipping", label: "邮寄" }, { value: "both", label: "both" }] },
+          { name: "image_file", label: "Upload image", type: "file" },
+          { name: "image_url", label: "Image URL", type: "url" },
+          { name: "product_info", label: "Product info", type: "textarea" },
+          { name: "status", label: "Status", type: "select", options: statusOptions },
+        ],
+        rewardFields: [
+          { name: "reward_name", label: "Reward name", type: "text" },
+          { name: "reward_type", label: "Reward type", type: "select", options: [{ value: "coupon", label: "coupon" }, { value: "digital_template", label: "digital_template" }, { value: "physical_goods", label: "physical_goods" }, { value: "benefit", label: "benefit" }] },
+          { name: "unit_point_cost", label: "Point cost", type: "number" },
+          { name: "bound_device_id", label: "绑定设备", type: "select", options: mainDeviceOptions },
+          { name: "stock_s", label: "Stock S", type: "number" },
+          { name: "stock_m", label: "Stock M", type: "number" },
+          { name: "stock_l", label: "Stock L", type: "number" },
+          { name: "stock_xl", label: "Stock XL", type: "number" },
+          { name: "is_featured", label: "是否精品", type: "select", options: [{ value: "0", label: "No" }, { value: "1", label: "Yes" }] },
+          { name: "pickup_method", label: "支持取货方式", type: "select", options: [{ value: "pickup", label: "自取" }, { value: "shipping", label: "邮寄" }, { value: "both", label: "both" }] },
+          { name: "image_file", label: "Upload image", type: "file" },
+          { name: "image_url", label: "Image URL", type: "url" },
+          { name: "reward_info", label: "Reward info", type: "textarea" },
+          { name: "status", label: "Status", type: "select", options: statusOptions },
+        ],
       }),
       "promo-assets": adminModel("Promotional Assets", "promo_asset_id", promoAssets.map((item) => ({
         ...item,
@@ -1835,19 +1885,21 @@ async function handlePgAdminTaxonomy(req, body, action) {
 }
 
 async function handlePgAdminImportProduct(body, itemType) {
+  await ensurePgAdminRuntimeSchema();
   if (body.source === "xlsx") {
     return { ok: false, error: "Cloud XLSX import is not enabled yet. Please use single item import for Railway." };
   }
   const item = body.item || {};
+  const boundDeviceId = await validatePgBoundDevice(item.bound_device_id);
   if (itemType === "reward") {
     const rewardId = cleanPgText(item.reward_id || item.id, `reward_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`);
     await pgPool.query(
       `
       INSERT INTO rewards (
         reward_id, reward_name, reward_type, unit_point_cost, reward_info, image_url, image_base64,
-        pickup_method, is_featured, stock_quantity, stock_s, stock_m, stock_l, stock_xl, status
+        bound_device_id, pickup_method, is_featured, stock_quantity, stock_s, stock_m, stock_l, stock_xl, status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15, 'active'))
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE($16, 'active'))
       ON CONFLICT (reward_id) DO UPDATE SET
         reward_name=EXCLUDED.reward_name,
         reward_type=EXCLUDED.reward_type,
@@ -1855,6 +1907,7 @@ async function handlePgAdminImportProduct(body, itemType) {
         reward_info=EXCLUDED.reward_info,
         image_url=EXCLUDED.image_url,
         image_base64=EXCLUDED.image_base64,
+        bound_device_id=EXCLUDED.bound_device_id,
         pickup_method=EXCLUDED.pickup_method,
         is_featured=EXCLUDED.is_featured,
         stock_quantity=EXCLUDED.stock_quantity,
@@ -1872,6 +1925,7 @@ async function handlePgAdminImportProduct(body, itemType) {
         cleanPgText(item.reward_info || item.info),
         cleanPgText(item.image_url),
         pgDataUrlOrBase64(item.image_base64),
+        boundDeviceId,
         cleanPgText(item.pickup_method, "pickup"),
         pgFlag(item.is_featured),
         pgInteger(item.stock_quantity || item.stock),
@@ -1889,10 +1943,10 @@ async function handlePgAdminImportProduct(body, itemType) {
     `
     INSERT INTO products (
       product_id, product_type, product_name, unit_price, product_info, image_url, image_base64,
-      style_tags, nail_shape, stock_quantity, stock_s, stock_m, stock_l, stock_xl,
+      style_tags, nail_shape, bound_device_id, stock_quantity, stock_s, stock_m, stock_l, stock_xl,
       on_delivery, pickup_method, is_featured, status
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, COALESCE($18, 'active'))
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, COALESCE($19, 'active'))
     ON CONFLICT (product_id) DO UPDATE SET
       product_type=EXCLUDED.product_type,
       product_name=EXCLUDED.product_name,
@@ -1902,6 +1956,7 @@ async function handlePgAdminImportProduct(body, itemType) {
       image_base64=EXCLUDED.image_base64,
       style_tags=EXCLUDED.style_tags,
       nail_shape=EXCLUDED.nail_shape,
+      bound_device_id=EXCLUDED.bound_device_id,
       stock_quantity=EXCLUDED.stock_quantity,
       stock_s=EXCLUDED.stock_s,
       stock_m=EXCLUDED.stock_m,
@@ -1922,6 +1977,7 @@ async function handlePgAdminImportProduct(body, itemType) {
       pgDataUrlOrBase64(item.image_base64),
       cleanPgText(item.style_tags),
       cleanPgText(item.nail_shape),
+      boundDeviceId,
       pgInteger(item.stock_quantity || item.stock),
       pgInteger(item.stock_s),
       pgInteger(item.stock_m),
@@ -2501,7 +2557,7 @@ async function handleAdminImportProduct(req, res) {
       return;
     }
     const result = await runPythonJsonScript(path.join(root, "database", "admin_product_import.py"), { ...body, itemType });
-    sendJson(res, 200, result);
+    sendJson(res, result.ok === false ? 400 : 200, result);
   } catch (error) {
     sendJson(res, 500, { error: error.message || "Failed to import product data." });
   }
@@ -2635,6 +2691,31 @@ async function safePgRows(query, params = []) {
     if (["42P01", "42703"].includes(error.code)) return [];
     throw error;
   }
+}
+
+async function ensurePgAdminRuntimeSchema() {
+  if (!hasPostgresRuntime() || pgAdminRuntimeSchemaReady) return;
+  await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
+  await pgPool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
+  pgAdminRuntimeSchemaReady = true;
+}
+
+async function validatePgBoundDevice(value) {
+  const deviceId = cleanPgText(value);
+  if (!deviceId) return "";
+  await ensurePgAdminRuntimeSchema();
+  const row = (await pgPool.query(
+    `
+    SELECT equip_id
+    FROM device_info
+    WHERE equip_id=$1
+      AND type IN ('主机', 'main_unit')
+      AND COALESCE(status, 'active')='active'
+    `,
+    [deviceId],
+  )).rows[0];
+  if (!row) throw new Error("设备不存在无法添加");
+  return deviceId;
 }
 
 async function pgTaxonomyMap(targetType) {
@@ -2799,6 +2880,7 @@ async function loadPgMaterialBases() {
 }
 
 async function loadPgProducts() {
+  await ensurePgAdminRuntimeSchema();
   const productLinks = await pgTaxonomyMap("product");
   const items = await safePgRows(`
     SELECT
@@ -2809,6 +2891,7 @@ async function loadPgProducts() {
       p.product_info,
       p.style_tags,
       p.nail_shape,
+      p.bound_device_id,
       p.stock_quantity,
       p.stock_s,
       p.stock_m,
