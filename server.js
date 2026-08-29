@@ -88,6 +88,10 @@ const server = http.createServer(async (req, res) => {
       handleDbUrlDiagnostic(req, res);
       return;
     }
+    if (req.method === "GET" && url.pathname === "/api/static-diagnostic") {
+      handleStaticDiagnostic(req, res, url);
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/user/session") {
       await handleUserSession(req, res);
       return;
@@ -319,6 +323,28 @@ function handleDbUrlDiagnostic(req, res) {
   sendJson(res, 200, {
     ok: true,
     diagnostic: databaseUrlDiagnostic(),
+  }, { "Cache-Control": "no-store" });
+}
+
+function handleStaticDiagnostic(req, res, url) {
+  const requested = url.searchParams.get("path") || "assets/materials/generated-nail-cutouts/material-124-finger-2.png";
+  const cleanRequested = requested.replace(/^[/\\]+/, "");
+  const normalized = path.normalize(cleanRequested).replace(/^(\.\.[/\\])+/, "");
+  const filePath = path.resolve(root, normalized);
+  const dirPath = path.dirname(filePath);
+  const exists = filePath.startsWith(root) && fs.existsSync(filePath);
+  const dirExists = dirPath.startsWith(root) && fs.existsSync(dirPath);
+  const siblings = dirExists ? fs.readdirSync(dirPath).slice(0, 20) : [];
+  sendJson(res, 200, {
+    ok: true,
+    root,
+    requested,
+    normalized,
+    filePath,
+    exists,
+    dirPath,
+    dirExists,
+    siblings,
   }, { "Cache-Control": "no-store" });
 }
 
