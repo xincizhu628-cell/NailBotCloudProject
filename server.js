@@ -3038,11 +3038,16 @@ async function pgTaxonomyMap(targetType) {
 function pgAssetSource(asset) {
   if (!asset) return "";
   if (asset.url) return asset.url;
+  const base64 = String(asset.base64_data || asset.image_base64 || "").trim();
+  if (base64) {
+    if (base64.startsWith("data:")) return base64;
+    return `data:${asset.mime_type || "image/png"};base64,${base64}`;
+  }
   return "";
 }
 
 async function pgAssetMap() {
-  const assets = await safePgRows("SELECT asset_id, url, mime_type FROM assets");
+  const assets = await safePgRows("SELECT asset_id, url, base64_data, mime_type FROM assets");
   return new Map(assets.map((asset) => [asset.asset_id, asset]));
 }
 
@@ -3110,7 +3115,9 @@ async function loadPgTemplates() {
       t.published_at,
       t.image_asset_ids,
       COALESCE(a.asset_id, '') AS image_asset_id,
-      COALESCE(a.url, '') AS image_url
+      COALESCE(a.url, '') AS image_url,
+      COALESCE(a.base64_data, '') AS image_base64,
+      COALESCE(a.mime_type, '') AS image_mime_type
     FROM templates t
     LEFT JOIN assets a ON a.asset_id = COALESCE(t.cover_asset_id, t.image_asset_id)
     WHERE t.status='active' AND t.visibility='public' AND t.source_type IN ('official', 'community')
@@ -3122,7 +3129,14 @@ async function loadPgTemplates() {
       const source = pgAssetSource(assets.get(assetId));
       if (source) imageList.push(source);
     }
-    if (!imageList.length && item.image_url) imageList.push(item.image_url);
+    if (!imageList.length) {
+      const coverSource = pgAssetSource({
+        url: item.image_url,
+        base64_data: item.image_base64,
+        mime_type: item.image_mime_type,
+      });
+      if (coverSource) imageList.push(coverSource);
+    }
     const categoryIds = [
       ...(templateLinks.get(item.template_id) || []),
       ...(galleryMap.get(item.template_id) || []),
@@ -3159,7 +3173,9 @@ async function loadPgMaterialBases() {
       t.material_categories,
       t.image_asset_ids,
       COALESCE(a.asset_id, '') AS image_asset_id,
-      COALESCE(a.url, '') AS image_url
+      COALESCE(a.url, '') AS image_url,
+      COALESCE(a.base64_data, '') AS image_base64,
+      COALESCE(a.mime_type, '') AS image_mime_type
     FROM templates t
     LEFT JOIN assets a ON a.asset_id = COALESCE(t.cover_asset_id, t.image_asset_id)
     WHERE t.source_type='official'
@@ -3185,7 +3201,14 @@ async function loadPgMaterialBases() {
       const source = pgAssetSource(assets.get(assetId));
       if (source) imageList.push(source);
     }
-    if (!imageList.length && item.image_url) imageList.push(item.image_url);
+    if (!imageList.length) {
+      const coverSource = pgAssetSource({
+        url: item.image_url,
+        base64_data: item.image_base64,
+        mime_type: item.image_mime_type,
+      });
+      if (coverSource) imageList.push(coverSource);
+    }
     return {
       ...item,
       image_base64: "",

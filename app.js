@@ -3424,17 +3424,48 @@ function materialCategoryMatch(template, materialId) {
   return values.includes(materialKey) || values.includes(materialNumber) || values.includes(materialName.toLowerCase());
 }
 
+function materialFingerFromTemplate(template) {
+  const values = [
+    template?.id,
+    template?.template_id,
+    template?.name,
+    template?.zhName,
+    template?.template_name,
+    template?.template_title,
+    template?.image_url,
+    ...(Array.isArray(template?.image_list) ? template.image_list : []),
+  ].filter(Boolean).join("|").toLowerCase();
+  const named = [
+    ["thumb", ["thumb", "大拇指", "拇指"]],
+    ["index", ["index", "食指"]],
+    ["middle", ["middle", "中指"]],
+    ["ring", ["ring", "无名指"]],
+    ["pinky", ["pinky", "little", "小指"]],
+  ].find(([, aliases]) => aliases.some((alias) => values.includes(alias)));
+  if (named) return named[0];
+  const orderMatch = values.match(/(?:^|[^0-9])(?:finger)?([1-5])(?:[^0-9]|$)/);
+  if (orderMatch) return fingers[Number(orderMatch[1]) - 1] || "";
+  return "";
+}
+
 function officialMaterialTemplateSet(materialId) {
   const templates = ((publicCatalog?.material_bases?.length ? publicCatalog.material_bases : publicCatalog?.templates) || [])
     .filter((item) => item.source_type === "official" && materialCategoryMatch(item, materialId) && templateImageList(item).length);
+  const multiImageTemplate = templates.find((item) => templateImageList(item).length >= fingers.length);
+  if (multiImageTemplate) {
+    return Object.fromEntries(fingers.map((finger) => [finger, multiImageTemplate]));
+  }
+  const byFinger = new Map();
   const byShape = new Map();
   templates.forEach((item) => {
+    const finger = materialFingerFromTemplate(item);
+    if (finger && !byFinger.has(finger)) byFinger.set(finger, item);
     const shape = String(item.nail_shape || "").trim();
     if (shape && !byShape.has(shape)) byShape.set(shape, item);
   });
   return Object.fromEntries(fingers.map((finger) => {
     const shape = fixedShapeForFinger(finger);
-    const match = byShape.get(shape) || templates.find((item) => templateImageSource(item));
+    const match = byFinger.get(finger) || byShape.get(shape) || templates.find((item) => templateImageSource(item));
     return [finger, match || null];
   }));
 }
@@ -5268,12 +5299,15 @@ function endObjectRotate(event) {
 
 function beginObjectEdit(event) {
   const point = canvasPoint(event);
-  const layer = designerState.selectedObjectId
+  const selectedLayer = designerState.selectedObjectId
     ? currentFinger().layers.find((item) => item.id === designerState.selectedObjectId && item.type === "asset")
+    : null;
+  const layer = selectedLayer && pointInLayerBox(point, selectedLayer, 26)
+    ? selectedLayer
     : assetLayerAt(point);
   if (!layer || !pointInLayerBox(point, layer, 26)) {
-    const selectedLayer = currentFinger().layers.find((item) => item.id === designerState.selectedObjectId);
-    if (selectedLayer?.temporaryPaintSelection) commitTemporaryPaintSelection(selectedLayer);
+    const currentSelected = currentFinger().layers.find((item) => item.id === designerState.selectedObjectId);
+    if (currentSelected?.temporaryPaintSelection) commitTemporaryPaintSelection(currentSelected);
     return false;
   }
   designerState.activeLayerId = layer.id;
@@ -5290,6 +5324,22 @@ function beginObjectEdit(event) {
   return true;
 }
 
+function clampAssetCoordinate(value, size, canvasSize) {
+  const visibleMargin = 32;
+  const min = Math.min(visibleMargin - size, canvasSize - visibleMargin);
+  const max = Math.max(visibleMargin - size, canvasSize - visibleMargin);
+  return Math.max(min, Math.min(max, value));
+}
+
+function releasePaintPointer(event) {
+  if (event?.pointerId === undefined || !paintCanvas()) return;
+  try {
+    paintCanvas().releasePointerCapture(event.pointerId);
+  } catch {
+    // The browser may already have released capture after a cancelled pointer.
+  }
+}
+
 function updateObjectEdit(event) {
   if (!objectAction) return;
   const point = canvasPoint(event);
@@ -5297,8 +5347,8 @@ function updateObjectEdit(event) {
   const dy = point.y - objectAction.start.y;
   const layer = objectAction.layer;
   if (objectAction.mode === "move") {
-    layer.x = Math.max(0, Math.min(420 - layer.w, objectAction.original.x + dx));
-    layer.y = Math.max(0, Math.min(760 - layer.h, objectAction.original.y + dy));
+    layer.x = clampAssetCoordinate(objectAction.original.x + dx, layer.w, 420);
+    layer.y = clampAssetCoordinate(objectAction.original.y + dy, layer.h, 760);
   } else {
     resizeRotatedLayerFromPointer(layer, objectAction.original, objectAction.handle || "se", point);
   }
@@ -8145,21 +8195,17 @@ paintCanvas().addEventListener("pointermove", (event) => {
 paintCanvas().addEventListener("pointerup", (event) => {
   if (pendingDrawPointerId === event.pointerId && !isDrawing) {
     pendingDrawPointerId = null;
-    try {
-      paintCanvas().releasePointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture may already be gone if the browser cancelled it.
-    }
+    releasePaintPointer(event);
     return;
   }
   if (selectionAction) {
     endSelection();
-    paintCanvas().releasePointerCapture(event.pointerId);
+    releasePaintPointer(event);
     return;
   }
   if (objectAction) {
     endObjectEdit();
-    paintCanvas().releasePointerCapture(event.pointerId);
+    releasePaintPointer(event);
     return;
   }
   if (!isDrawing) return;
@@ -8168,25 +8214,53 @@ paintCanvas().addEventListener("pointerup", (event) => {
   saveCurrentCanvas();
   renderLayerList();
   autoSave();
-  paintCanvas().releasePointerCapture(event.pointerId);
+  releasePaintPointer(event);
 });
 
-paintCanvas().addEventListener("pointercancel", () => {
+paintCanvas().addEventListener("pointercancel", (event) => {
   pendingDrawPointerId = null;
   isDrawing = false;
   objectAction = null;
   selectionAction = null;
   $("#selection-box")?.classList.remove("active");
   lastPoint = null;
+  releasePaintPointer(event);
   saveCurrentCanvas();
   renderDesigner();
 });
 
 paintCanvas().addEventListener("pointerleave", () => {
-  pendingDrawPointerId = null;
-  isDrawing = false;
+  if (objectAction || selectionAction || isDrawing || pendingDrawPointerId !== null) return;
   paintCanvas().style.cursor = "";
   $(".brush-cursor").classList.remove("active");
+});
+
+document.addEventListener("pointerup", (event) => {
+  if (objectAction) {
+    endObjectEdit();
+    releasePaintPointer(event);
+  }
+  if (selectionAction) {
+    endSelection();
+    releasePaintPointer(event);
+  }
+  if (pendingDrawPointerId === event.pointerId && !isDrawing) {
+    pendingDrawPointerId = null;
+    releasePaintPointer(event);
+  }
+});
+
+document.addEventListener("pointercancel", (event) => {
+  if (!objectAction && !selectionAction && pendingDrawPointerId === null && !isDrawing) return;
+  pendingDrawPointerId = null;
+  isDrawing = false;
+  objectAction = null;
+  selectionAction = null;
+  lastPoint = null;
+  $("#selection-box")?.classList.remove("active");
+  releasePaintPointer(event);
+  saveCurrentCanvas();
+  renderDesigner();
 });
 
 buildAnchorGrid();
