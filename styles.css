@@ -1664,8 +1664,12 @@ body[data-active-view="home"] .auth-profile-button {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-right: 0;
+  max-height: calc(min(94vh, 680px) - clamp(150px, 28vh, 250px) - 56px);
+  overflow-y: auto;
+  padding-right: 6px;
   font-size: 0.84rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(223, 94, 147, 0.42) rgba(255, 248, 251, 0.78);
 }
 
 #product-detail-description {
@@ -1858,6 +1862,12 @@ body[data-active-view="home"] .auth-profile-button {
 .mini-modal-card textarea,
 .cart-edit-body textarea {
   resize: vertical;
+}
+
+.product-detail-remark textarea {
+  min-height: 32px;
+  height: 32px;
+  resize: none;
 }
 
 .product-detail-copy h3 {
