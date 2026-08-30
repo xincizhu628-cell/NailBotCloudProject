@@ -2121,8 +2121,10 @@ function setPrintTutorial(key) {
   if (card) card.dataset.tutorial = key;
   const title = $("#print-guide-image-title");
   const text = $("#print-guide-image-text");
+  const selectedLabel = $("#print-guide-selected-label");
   if (title) title.textContent = tutorial.title;
   if (text) text.textContent = tutorial.text;
+  if (selectedLabel) selectedLabel.textContent = tutorial.title;
 }
 
 function togglePrintTutorialMenu(forceOpen = null) {

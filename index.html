@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=132" />
+    <link rel="stylesheet" href="styles.css?v=133" />
   </head>
   <body>
     <div class="app-shell">
@@ -208,10 +208,7 @@
           <div class="tab-panel" id="printcode-panel">
             <section class="print-guide-page" aria-label="Design print guide">
               <header class="print-guide-title-row">
-                <button class="print-guide-title-toggle" id="print-guide-title-toggle" type="button" aria-expanded="false" aria-label="Expand tutorial catalog">
-                  <strong>Print Your Own Nail</strong>
-                  <span aria-hidden="true">▽</span>
-                </button>
+                <h2>Print Your Own Nail</h2>
               </header>
 
               <button class="print-order-entry" id="open-print-order-entry" type="button">
@@ -224,6 +221,10 @@
               </button>
 
               <div class="print-guide-frame">
+                <button class="print-guide-select-toggle" id="print-guide-title-toggle" type="button" aria-expanded="false" aria-label="Expand tutorial catalog">
+                  <strong id="print-guide-selected-label">在官网设计模板</strong>
+                  <span aria-hidden="true">▽</span>
+                </button>
                 <div class="print-guide-option-bar is-collapsed" id="print-guide-option-bar" aria-label="Tutorial options">
                   <button class="active" type="button" data-print-tutorial="official-template">在官网设计模板</button>
                   <button type="button" data-print-tutorial="ai-design">使用AI一键设计</button>
@@ -1041,7 +1042,7 @@
         <button class="eyedropper-btn" id="eyedropper-btn" title="Eyedropper">◎</button>
       </div>
     </div>
-    <script src="app.js?v=125"></script>
+    <script src="app.js?v=126"></script>
   </body>
 </html>
 
