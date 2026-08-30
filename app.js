@@ -768,7 +768,7 @@ const localMaterialBaseMap = Object.fromEntries(
     const materialNumber = materialId.replace(/^m/, "");
     return [
       materialId,
-      fingers.map((_, index) => `assets/materials/generated-nail-cutouts/material-${materialNumber}-finger-${index + 1}.png`),
+      fingers.map((_, index) => `assets/materials/generated-nail-cutouts/material-${materialNumber}-finger-${index + 1}.png?v=121`),
     ];
   }),
 );
