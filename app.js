@@ -635,6 +635,7 @@ const PRODUCT_CART_KEY = "nailStudioProductCartV1";
 const PRODUCT_TEMP_ADDRESS_KEY = "nailStudioTempShippingAddressV1";
 const USER_AUTH_SESSION_KEY = "nailStudioUserAuthSessionV1";
 const USER_GUEST_CONTINUE_KEY = "nailStudioGuestContinueV1";
+const FIRST_DESIGN_GUIDE_KEY = "nailStudioFirstDesignGuideSeenV1";
 const productSizeOrder = ["S", "M", "L", "XL"];
 
 const productStyleFilters = [
@@ -2122,6 +2123,32 @@ function setPrintTutorial(key) {
   const text = $("#print-guide-image-text");
   if (title) title.textContent = tutorial.title;
   if (text) text.textContent = tutorial.text;
+}
+
+function togglePrintTutorialMenu(forceOpen = null) {
+  const menu = $("#print-guide-option-bar");
+  const toggle = $("#print-guide-title-toggle");
+  if (!menu || !toggle) return;
+  const shouldOpen = forceOpen === null ? menu.classList.contains("is-collapsed") : Boolean(forceOpen);
+  menu.classList.toggle("is-collapsed", !shouldOpen);
+  toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+}
+
+function firstDesignGuideStorageKey() {
+  const userKey = currentAuthUser?.userId || currentAuthUser?.id || currentAuthUser?.username || storedAuthSessionId() || "browser";
+  return `${FIRST_DESIGN_GUIDE_KEY}:${userKey}`;
+}
+
+function shouldRouteFirstDesignVisitToGuide() {
+  if (!currentAuthUser && !storedAuthSessionId()) return false;
+  try {
+    const key = firstDesignGuideStorageKey();
+    if (localStorage.getItem(key)) return false;
+    localStorage.setItem(key, new Date().toISOString());
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function setAiWorkflowStep(step) {
@@ -4984,6 +5011,10 @@ function activateView(viewName) {
     renderGallerySourceTabs();
     renderGalleryCategories();
     renderDesigns();
+    if (shouldRouteFirstDesignVisitToGuide()) {
+      activateDesignTab("printcode");
+      togglePrintTutorialMenu(false);
+    }
   }
   updateMemberStickyLabel();
 }
@@ -7881,8 +7912,16 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("#exit-save-yes")) exitCanvas({ saveDraft: true });
   if (event.target.closest("#exit-save-no")) exitCanvas({ saveDraft: false });
 
+  if (event.target.closest("#print-guide-title-toggle")) {
+    togglePrintTutorialMenu();
+    return;
+  }
   const printTutorialButton = event.target.closest("[data-print-tutorial]");
-  if (printTutorialButton) setPrintTutorial(printTutorialButton.dataset.printTutorial);
+  if (printTutorialButton) {
+    setPrintTutorial(printTutorialButton.dataset.printTutorial);
+    togglePrintTutorialMenu(false);
+    return;
+  }
 
   if (event.target.closest("#choose-template-from-print")) switchToPublicTemplateGallery({ communityFirst: true });
   const printGuideTarget = event.target.closest("[data-guide-target]");

@@ -5707,6 +5707,11 @@ select {
   color: var(--guide-purple);
   font-size: 1.6rem;
   line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.print-guide-title-toggle[aria-expanded="true"] span {
+  transform: rotate(180deg);
 }
 
 .print-guide-frame {
@@ -5730,6 +5735,10 @@ select {
   display: grid;
   grid-template-columns: repeat(4, minmax(150px, 1fr));
   gap: 10px;
+}
+
+.print-guide-option-bar.is-collapsed {
+  display: none;
 }
 
 .print-guide-option-bar button {
