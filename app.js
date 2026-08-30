@@ -121,7 +121,7 @@
     designCanvasD3: "Personal Gallery & Canvas",
     designGallery: "Design Gallery",
     designCanvas: "Canvas",
-    printCode: "Design Print Guide",
+    printCode: "Print Your Own Nail",
     publicGallery: "Community Template Library",
     officialGallery: "Official Gallery",
     communityGallery: "Community Gallery",
@@ -254,8 +254,8 @@
     assetPetal: "Petal Outline",
     assetStar: "Future Star",
     assetRibbon: "Soft Ribbon",
-    printEyebrow: "Design print guide",
-    printTitle: "Preview, activate, and send a design to print",
+    printEyebrow: "Print guide",
+    printTitle: "Print Your Own Nail",
     activate: "Activate",
     printStatusIdle: "Waiting for activation.",
     allTopics: "All topics",
@@ -410,7 +410,7 @@
     productNoCampaign: "暂无商品购买活动。",
     designGallery: "设计图库",
     designCanvas: "画布",
-    printCode: "设计打印指引",
+    printCode: "Print Your Own Nail",
     publicGallery: "社区模板库",
     officialGallery: "官方图库",
     communityGallery: "社区图库",
@@ -537,8 +537,8 @@
     importLocalAsset: "导入本地图片",
     libraryAssets: "图库素材",
     activate: "激活",
-    printEyebrow: "设计打印指引",
-    printTitle: "预览、激活并发送设计到打印设备",
+    printEyebrow: "打印导览",
+    printTitle: "Print Your Own Nail",
     printStatusIdle: "等待激活。",
     allTopics: "全部话题",
     like: "点赞",
@@ -2091,6 +2091,37 @@ async function renderPrintRecords() {
   } catch (error) {
     list.innerHTML = `<p class="muted">${escapeHtml(error.message || "Failed to load print records.")}</p>`;
   }
+}
+
+const printTutorials = {
+  "official-template": {
+    title: "在官网设计模板",
+    text: "从社区模板库或官方模板库选择喜欢的设计，打开预览后进入打印下单流程。",
+  },
+  "ai-design": {
+    title: "使用AI一键设计",
+    text: "在画布中打开 AI 一键设计，输入需求并选择生成结果，再导出为可打印模板。",
+  },
+  "site-order": {
+    title: "通过官网下单打印",
+    text: "在官网选择模板、材质和打印设备，支付完成后获得打印码并同步到设备。",
+  },
+  "machine-upload": {
+    title: "向nail打印机上传图片并打印",
+    text: "在打印机端选择上传图片入口，导入图片后根据设备提示完成打印。",
+  },
+};
+
+function setPrintTutorial(key) {
+  const tutorial = printTutorials[key] || printTutorials["official-template"];
+  $("[data-print-tutorial].active")?.classList.remove("active");
+  $(`[data-print-tutorial="${key}"]`)?.classList.add("active");
+  const card = $("#print-guide-image-card");
+  if (card) card.dataset.tutorial = key;
+  const title = $("#print-guide-image-title");
+  const text = $("#print-guide-image-text");
+  if (title) title.textContent = tutorial.title;
+  if (text) text.textContent = tutorial.text;
 }
 
 function setAiWorkflowStep(step) {
@@ -7849,6 +7880,9 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("#cancel-exit-choice") || event.target.closest("#exit-save-cancel")) closeExitChoiceModal();
   if (event.target.closest("#exit-save-yes")) exitCanvas({ saveDraft: true });
   if (event.target.closest("#exit-save-no")) exitCanvas({ saveDraft: false });
+
+  const printTutorialButton = event.target.closest("[data-print-tutorial]");
+  if (printTutorialButton) setPrintTutorial(printTutorialButton.dataset.printTutorial);
 
   if (event.target.closest("#choose-template-from-print")) switchToPublicTemplateGallery({ communityFirst: true });
   const printGuideTarget = event.target.closest("[data-guide-target]");

@@ -5672,7 +5672,15 @@ select {
 .print-guide-title-row {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+}
+
+.print-guide-title-row h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.8rem, 3.2vw, 3.2rem);
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
 .print-guide-title-toggle {
@@ -5703,18 +5711,86 @@ select {
 
 .print-guide-frame {
   position: relative;
-  min-height: clamp(360px, 38vw, 520px);
+  min-height: 0;
   display: grid;
-  align-items: center;
-  padding: clamp(42px, 4.5vw, 70px) clamp(22px, 4vw, 58px);
+  gap: clamp(14px, 2vw, 22px);
+  align-items: stretch;
+  padding: clamp(16px, 2.4vw, 28px);
   border: 1px solid rgba(197, 93, 167, 0.28);
-  border-radius: 34px;
+  border-radius: 18px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 228, 239, 0.36)),
     radial-gradient(circle at 50% 0, rgba(197, 93, 167, 0.12), transparent 12rem);
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.7),
     0 20px 58px rgba(197, 93, 167, 0.1);
+}
+
+.print-guide-option-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.print-guide-option-bar button {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgba(223, 94, 147, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--ink);
+  font-size: clamp(0.86rem, 1vw, 0.98rem);
+  font-weight: 650;
+}
+
+.print-guide-option-bar button.active {
+  border-color: rgba(223, 94, 147, 0.42);
+  background: linear-gradient(135deg, rgba(223, 94, 147, 0.18), rgba(140, 124, 255, 0.18));
+  color: var(--pink-strong);
+}
+
+.print-guide-image-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.34fr);
+  gap: clamp(14px, 2vw, 22px);
+  align-items: stretch;
+}
+
+.print-guide-image-placeholder {
+  min-height: clamp(320px, 43vw, 620px);
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(223, 94, 147, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 228, 239, 0.52)),
+    repeating-linear-gradient(45deg, rgba(223, 94, 147, 0.08) 0 1px, transparent 1px 18px);
+  color: rgba(45, 35, 48, 0.38);
+  font-size: clamp(1rem, 1.6vw, 1.35rem);
+  font-weight: 650;
+}
+
+.print-guide-image-copy {
+  display: grid;
+  align-content: end;
+  gap: 10px;
+  padding: clamp(16px, 2vw, 22px);
+  border: 1px solid rgba(223, 94, 147, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.print-guide-image-copy strong {
+  color: var(--ink);
+  font-size: clamp(1.08rem, 1.5vw, 1.42rem);
+  font-weight: 700;
+}
+
+.print-guide-image-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.7;
 }
 
 .print-guide-frame::before,
@@ -7064,6 +7140,18 @@ select {
   .product-address-row {
     grid-template-columns: 1fr;
   }
+
+  .print-guide-option-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .print-guide-image-card {
+    grid-template-columns: 1fr;
+  }
+
+  .print-guide-image-placeholder {
+    min-height: clamp(240px, 56vw, 420px);
+  }
 }
 
 @media (max-width: 460px) {
@@ -7073,10 +7161,11 @@ select {
   }
 
   .print-guide-frame {
-    padding: 54px 12px 20px;
+    padding: 14px 12px 16px;
   }
 
-  .print-guide-steps {
+  .print-guide-steps,
+  .print-guide-option-bar {
     grid-template-columns: 1fr;
   }
 

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=130" />
+    <link rel="stylesheet" href="styles.css?v=131" />
   </head>
   <body>
     <div class="app-shell">
@@ -208,10 +208,10 @@
           <div class="tab-panel" id="printcode-panel">
             <section class="print-guide-page" aria-label="Design print guide">
               <header class="print-guide-title-row">
-                <button class="print-guide-title-toggle" type="button" aria-label="Expand tutorial catalog">
-                  <strong>从官网选择模板并上传打印</strong>
-                  <span aria-hidden="true">▽</span>
-                </button>
+                <div>
+                  <p class="eyebrow">Print guide</p>
+                  <h2>Print Your Own Nail</h2>
+                </div>
               </header>
 
               <button class="print-order-entry" id="open-print-order-entry" type="button">
@@ -224,65 +224,21 @@
               </button>
 
               <div class="print-guide-frame">
-                <div class="print-guide-steps">
-                  <article class="print-guide-step">
-                    <span class="print-guide-step-icon" aria-hidden="true">▦</span>
-                    <h3>STEP1 选模板</h3>
-                    <div class="print-guide-copy">
-                      <p>具体步骤</p>
-                      <ul>
-                        <li>进入模板库</li>
-                        <li>选择适合甲形的模板</li>
-                        <li>确认打印预览</li>
-                      </ul>
-                    </div>
-                    <div class="print-guide-video"><span>▶</span><strong>视频片段</strong></div>
-                  </article>
-                  <article class="print-guide-step">
-                    <span class="print-guide-step-icon" aria-hidden="true">⌗</span>
-                    <h3>STEP2 扫描</h3>
-                    <div class="print-guide-copy">
-                      <p>具体步骤</p>
-                      <ul>
-                        <li>打开设备扫描页</li>
-                        <li>扫描打印二维码</li>
-                        <li>等待机器同步模板</li>
-                      </ul>
-                    </div>
-                    <div class="print-guide-video"><span>▶</span><strong>视频片段</strong></div>
-                  </article>
-                  <article class="print-guide-step">
-                    <span class="print-guide-step-icon" aria-hidden="true">☷</span>
-                    <h3>STEP3 调整打印</h3>
-                    <div class="print-guide-copy">
-                      <p>具体步骤</p>
-                      <ul>
-                        <li>检查甲片方向</li>
-                        <li>微调图案位置</li>
-                        <li>确认开始打印</li>
-                      </ul>
-                    </div>
-                    <div class="print-guide-video"><span>▶</span><strong>视频片段</strong></div>
-                  </article>
-                  <article class="print-guide-step">
-                    <span class="print-guide-step-icon" aria-hidden="true">◠</span>
-                    <h3>STEP4 涂胶烤干</h3>
-                    <div class="print-guide-copy">
-                      <p>具体步骤</p>
-                      <ul>
-                        <li>涂抹保护胶层</li>
-                        <li>按设备提示固化</li>
-                        <li>完成并取出甲片</li>
-                      </ul>
-                    </div>
-                    <div class="print-guide-video"><span>▶</span><strong>视频片段</strong></div>
-                  </article>
+                <div class="print-guide-option-bar" aria-label="Tutorial options">
+                  <button class="active" type="button" data-print-tutorial="official-template">在官网设计模板</button>
+                  <button type="button" data-print-tutorial="ai-design">使用AI一键设计</button>
+                  <button type="button" data-print-tutorial="site-order">通过官网下单打印</button>
+                  <button type="button" data-print-tutorial="machine-upload">向nail打印机上传图片并打印</button>
                 </div>
-              </div>
-
-              <div class="print-guide-actions">
-                <button class="print-guide-arrow print-guide-arrow-left" type="button" data-guide-target="canvas">去设计</button>
-                <button class="print-guide-arrow print-guide-arrow-right" type="button" id="choose-template-from-print" data-guide-target="gallery">去挑选模板</button>
+                <article class="print-guide-image-card" id="print-guide-image-card" data-tutorial="official-template">
+                  <div class="print-guide-image-placeholder" aria-hidden="true">
+                    <span>Print Guide Image</span>
+                  </div>
+                  <div class="print-guide-image-copy">
+                    <strong id="print-guide-image-title">在官网设计模板</strong>
+                    <p id="print-guide-image-text">从社区模板库或官方模板库选择喜欢的设计，打开预览后进入打印下单流程。</p>
+                  </div>
+                </article>
               </div>
 
               <div class="print-guide-hidden-controls" aria-hidden="true">
@@ -1080,7 +1036,7 @@
         <button class="eyedropper-btn" id="eyedropper-btn" title="Eyedropper">◎</button>
       </div>
     </div>
-    <script src="app.js?v=122"></script>
+    <script src="app.js?v=124"></script>
   </body>
 </html>
 
