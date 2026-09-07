@@ -21,5 +21,6 @@
     "test:order-codes": "node --test tests/orderCodes.test.js",
     "inspect:schema": "node tools/order_code_database.js",
     "migrate:order-codes": "node tools/order_code_database.js --apply"
-  }
+  },
+  "packageManager": "npm@10.9.4"
 }

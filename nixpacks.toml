@@ -1,3 +1,8 @@
 [phases.setup]
 nixPkgs = ["nodejs_22", "python312"]
 
+[phases.install]
+cmds = ["npm ci --omit=dev"]
+
+[start]
+cmd = "node server.js"
