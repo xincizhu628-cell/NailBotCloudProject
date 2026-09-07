@@ -8,6 +8,10 @@ const { Pool } = require("pg");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { createSquarePaymentService } = require("./services/squarePaymentService");
 
+const { createOrderCodeService } = require("./services/orderCodeService");
+const { createCodeConfirmationService } = require("./services/codeConfirmationService");
+const { createOrderCodeRoutes } = require("./services/orderCodeRoutes");
+
 const root = path.resolve(__dirname || process.cwd());
 loadEnvFile(path.join(root, ".env"));
 const bundledPython = path.join(os.homedir(), ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "python.exe");
@@ -19,6 +23,9 @@ const pgPool = databaseUrl ? new Pool({
   connectionString: databaseUrl,
   ssl: String(process.env.DATABASE_SSL || "true").toLowerCase() === "false" ? false : { rejectUnauthorized: false },
 }) : null;
+const orderCodes = pgPool ? createOrderCodeService(pgPool) : null;
+const codeRoutes = createOrderCodeRoutes({ codes: orderCodes, env: process.env, readJson, sendJson });
+const codeConfirmation = pgPool ? createCodeConfirmationService({ pool: pgPool, codes: orderCodes }) : null;
 const defaultModel = process.env.HF_IMAGE_MODEL || "black-forest-labs/FLUX.1-schnell";
 const defaultArkModel = process.env.ARK_IMAGE_MODEL || "seedream-4-5-251128";
 const defaultArkEndpoint = process.env.ARK_IMAGE_ENDPOINT || "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations";
@@ -47,6 +54,7 @@ const server = http.createServer(async (req, res) => {
   try {
     url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
     res.errorContext = requestErrorContext(req, url);
+    if (await codeRoutes(req, res, url)) return;
     /*
     if (req.method === "POST" && url.pathname === "/api/admin/login") {
       await handleAdminLogin(req, res);
@@ -245,7 +253,9 @@ const nailGenerationTargets = [
   { step: "step2-5", nail: "pinky finger", label: "Pinky" },
 ];
 
+server.on("close", () => codeConfirmation?.stop());
 server.listen(port, "0.0.0.0", () => {
+  codeConfirmation?.start();
   console.log(`AI Nail Studio server running at http://127.0.0.1:${port}/`);
   console.log(`AI image model: ${process.env.HF_IMAGE_MODEL || defaultModel}`);
   console.log(`Ark image model: ${process.env.ARK_IMAGE_MODEL || defaultArkModel}`);
@@ -546,8 +556,8 @@ async function ensurePrintServiceProduct(client, items) {
       product_id, product_type, product_name, unit_price, product_info,
       stock_quantity, stock_s, stock_m, stock_l, stock_xl, pickup_method, status
     )
-    VALUES ('PRINT-SERVICE', 'printing_nail', 'AI Nail Print Service', $1, 'Printable nail order service', 9999, 9999, 9999, 9999, 9999, 'pickup', 'active')
-    ON CONFLICT (product_id) DO UPDATE SET product_type=EXCLUDED.product_type
+    VALUES ('PRINT-SERVICE', 'printing_nail', 'AI Nail Print Service (printing available)', $1, 'Printable nail order service', 9999, 9999, 9999, 9999, 9999, 'pickup', 'active')
+    ON CONFLICT (product_id) DO UPDATE SET product_type=EXCLUDED.product_type, product_name=EXCLUDED.product_name
     RETURNING product_id, product_type, product_name, unit_price, bound_device_id
     `,
     [pgNumber(items.find((item) => item.isPrintService)?.price, 0)],
@@ -561,12 +571,25 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
   if (!items.length) return { ok: false, skipped: true, reason: "No checkout items were supplied." };
   const client = await pgPool.connect();
   const orderId = `order_${crypto.randomUUID().replace(/-/g, "")}`;
-  const pickupCode = makeNumericCode(6);
-  let printCode = "";
+  let pickupCode = "000000";
+  let printCode = null;
+  let generatedCodes = { printCodes: [], pickupCode: null };
   let boundDeviceId = "";
   let containsPrintable = false;
   try {
     await client.query("BEGIN");
+    const paymentId = cleanPgText(payment.paymentId);
+    if (!paymentId) throw new Error("A payment ID is required to create an order");
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`payment:${paymentId}`]);
+    const existing = (await client.query("SELECT * FROM orders WHERE payment_provider_id=$1 ORDER BY created_at LIMIT 1", [paymentId])).rows[0];
+    if (existing) {
+      const saved = await orderCodes.getOrderCodes(client, existing.order_id);
+      await client.query("COMMIT");
+      return { ok: true, orderId: existing.order_id, pickupCode: saved.pickupCode?.code || existing.pickup_code,
+        printCode: saved.printCodes[0]?.code || existing.print_code, printCodes: saved.printCodes,
+        pickupCodeRecord: saved.pickupCode, containsPrintable: Boolean(saved.printCodes.length || existing.print_code),
+        boundDeviceId: existing.bound_device_id, manufacturerSyncStatus: existing.manufacturer_sync_status };
+    }
     const userId = await resolveOrderUserId(client, body);
     const serviceRow = await ensurePrintServiceProduct(client, items);
     const productRows = (await client.query(
@@ -581,8 +604,7 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
       ? [...productRows, serviceRow]
       : productRows;
     const products = new Map(rows.map((product) => [String(product.product_id), product]));
-    containsPrintable = items.some((item) => itemLooksPrintable(item, products.get(String(item.id)) || {}));
-    printCode = containsPrintable ? makeNumericCode(6) : "";
+
     boundDeviceId = cleanPgText(items.find((item) => item.pickupDeviceId)?.pickupDeviceId)
       || cleanPgText(items.find((item) => item.boundDeviceId)?.boundDeviceId)
       || cleanPgText(rows.find((product) => product.bound_device_id)?.bound_device_id);
@@ -607,7 +629,10 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
       ],
     );
     for (const item of items) {
-      const product = products.get(String(item.id)) || {};
+      const product = products.get(String(item.id));
+      if (!product) throw new Error(`Product not found: ${item.id}`);
+      const quantity = Number(item.qty ?? item.quantity ?? 1);
+      if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10000) throw new Error("Invalid order quantity");
       await client.query(
         `
         INSERT INTO order_items (order_item_id, order_id, product_id, quantity, unit_price, size, item_snapshot)
@@ -617,13 +642,17 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
           `oi_${crypto.randomUUID().replace(/-/g, "")}`,
           orderId,
           String(item.id),
-          pgInteger(item.qty || item.quantity, 1),
+          quantity,
           pgNumber(item.price || product.unit_price),
           cleanPgText(item.size),
-          JSON.stringify(item),
+          JSON.stringify({ ...item, product_name: product.product_name }),
         ],
       );
     }
+    generatedCodes = await orderCodes.generateForOrder(client, orderId);
+    pickupCode = generatedCodes.pickupCode.code;
+    printCode = generatedCodes.printCodes[0]?.code || null;
+    containsPrintable = generatedCodes.printCodes.length > 0;
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
@@ -640,6 +669,8 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
     currency: body.currency || payment.currency || "AUD",
     pickupCode,
     printCode,
+    printCodes: generatedCodes.printCodes,
+    pickupCodeRecord: generatedCodes.pickupCode,
     containsPrintable,
     boundDeviceId,
     orderedAt: new Date().toISOString(),
@@ -659,6 +690,8 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
     orderId,
     pickupCode,
     printCode,
+    printCodes: generatedCodes.printCodes,
+    pickupCodeRecord: generatedCodes.pickupCode,
     containsPrintable,
     boundDeviceId,
     manufacturerSyncStatus: sync.status,
@@ -1383,6 +1416,7 @@ async function handlePgUserPrintRecords(body) {
       o.paid_at,
       o.pickup_code,
       o.print_code,
+      (SELECT COALESCE(json_agg(pc ORDER BY pc.id), '[]'::json) FROM "print-code" pc WHERE pc.order_id=o.order_id) AS print_codes,
       o.bound_device_id,
       o.manufacturer_sync_status,
       COALESCE(string_agg(DISTINCT p.product_name, ', '), '') AS product_names
@@ -1416,6 +1450,7 @@ async function handlePgUserPrintRecords(body) {
       paidAt: item.paid_at,
       pickupCode: item.pickup_code || "",
       printCode: item.print_code || "",
+      printCodes: item.print_codes || [],
       boundDeviceId: item.bound_device_id || "",
       manufacturerSyncStatus: item.manufacturer_sync_status || "",
     })),

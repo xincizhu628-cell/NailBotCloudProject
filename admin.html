@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -1000,6 +1000,11 @@
           padding: 12px;
         }
       }
+    [data-code-panel] form { margin-top: 20px; display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
+      [data-code-panel] form label { flex: 1; min-width: 220px; }
+      [data-code-panel] [data-load] { margin-top: 12px; }
+      [data-code-panel] [data-prev], [data-code-panel] [data-next] { margin: 12px 8px 0 0; padding: 8px 14px; border: 1px solid #ecd6e2; border-radius: 8px; background: white; cursor: pointer; }
+      [data-code-panel] button:disabled { opacity: .5; cursor: default; }
     </style>
   </head>
   <body>
@@ -1047,6 +1052,8 @@
             <div class="nav-group-items">
               <button class="nav-button level-2" data-admin-view="product">商品管理</button>
               <button class="nav-button level-2" data-admin-view="orders">订单记录</button>
+              <button class="nav-button level-2" data-admin-view="print-codes">打印码</button>
+              <button class="nav-button level-2" data-admin-view="pickup-codes">取货码</button>
               <button class="nav-button level-2" data-admin-view="reward-orders">积分兑换记录</button>
             </div>
           </div>
@@ -1445,6 +1452,8 @@
         </section>
 
         <section class="admin-view" id="admin-orders"></section>
+        <section class="admin-view" id="admin-print-codes" data-code-panel="print"></section>
+        <section class="admin-view" id="admin-pickup-codes" data-code-panel="pickup"></section>
         <section class="admin-view" id="admin-reward-orders"></section>
         <section class="admin-view" id="admin-task-records"></section>
         <section class="admin-view" id="admin-event-participation"></section>
@@ -1516,6 +1525,8 @@
         community: ["Community Gallery", "社区模板管理"],
         users: ["Users", "用户管理"],
         orders: ["Order Records", "订单记录"],
+        "print-codes": ["Print Codes", "打印码"],
+        "pickup-codes": ["Pickup Codes", "取货码"],
         "reward-orders": ["Reward Orders", "积分兑换记录"],
         "task-records": ["Task Records", "任务记录管理"],
         "event-participation": ["Event Participation", "活动参与管理"],
@@ -2935,6 +2946,7 @@
         }
       });
     </script>
+    <script src="assets/js/admin-order-codes.js"></script>
   </body>
 </html>
 

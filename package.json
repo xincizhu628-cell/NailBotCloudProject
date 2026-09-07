@@ -5,8 +5,9 @@
     "pg": "^8.16.3",
     "twilio": "^5.3.5"
   },
-  "devDependencies": {},
-  "optionalDependencies": {},
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -16,6 +17,9 @@
     "migrate:postgres": "node tools/import_csv_to_postgres.js",
     "migrate:assets": "node tools/upload_assets_to_r2.js",
     "migrate:asset-urls": "node tools/backfill_asset_urls.js",
-    "sync:material-cutouts": "node tools/sync_material_cutouts_to_cloud.js"
+    "sync:material-cutouts": "node tools/sync_material_cutouts_to_cloud.js",
+    "test:order-codes": "node --test tests/orderCodes.test.js",
+    "inspect:schema": "node tools/order_code_database.js",
+    "migrate:order-codes": "node tools/order_code_database.js --apply"
   }
 }
