@@ -1786,6 +1786,10 @@
         }
       }
 
+      window.addEventListener('template-saved', async event => {
+        await loadAdminModels();
+        renderAdminDataTable(event.detail.source);
+      });
       function setupAdminDataPages() {
         Object.entries(adminModelState).forEach(([view, model]) => {
           const section = document.querySelector(`#admin-${view}`);
@@ -2089,6 +2093,7 @@
       }
 
       function showAdminCreate(view) {
+        if (["official", "community"].includes(view)) { window.openTemplateEditor(view); return; }
         if (view === "product") {
           openProductCreateModal();
           return;
@@ -2365,6 +2370,7 @@
       }
 
       function openAdminEditModal(view, rowId, itemKind = "") {
+        if (["official", "community"].includes(view)) { window.openTemplateEditor(view, rowId); return; }
         const row = findAdminRow(view, rowId, itemKind);
         const model = adminModelState[view];
         if (!row || !model) return;
@@ -2947,6 +2953,7 @@
       });
     </script>
     <script src="assets/js/admin-order-codes.js"></script>
+  <script src="assets/js/admin-template-editor.js"></script>
   </body>
 </html>
 

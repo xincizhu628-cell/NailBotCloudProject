@@ -10,6 +10,9 @@ const { createSquarePaymentService } = require("./services/squarePaymentService"
 
 const { createOrderCodeService } = require("./services/orderCodeService");
 const { createCodeConfirmationService } = require("./services/codeConfirmationService");
+const { createTemplateAdminService } = require("./services/templateAdminService");
+const { createUserOrdersService } = require("./services/userOrdersService");
+const { createAdminAuthService } = require("./services/adminAuthService");
 const { createOrderCodeRoutes } = require("./services/orderCodeRoutes");
 
 const root = path.resolve(__dirname || process.cwd());
@@ -24,7 +27,10 @@ const pgPool = databaseUrl ? new Pool({
   ssl: String(process.env.DATABASE_SSL || "true").toLowerCase() === "false" ? false : { rejectUnauthorized: false },
 }) : null;
 const orderCodes = pgPool ? createOrderCodeService(pgPool) : null;
-const codeRoutes = createOrderCodeRoutes({ codes: orderCodes, env: process.env, readJson, sendJson });
+const templateAdminService = pgPool ? createTemplateAdminService(pgPool) : null;
+const userOrdersService = pgPool ? createUserOrdersService({ pool: pgPool, getSession: getPgAuthSession }) : null;
+const pgAdminAuth = pgPool ? createAdminAuthService(pgPool) : null;
+const codeRoutes = createOrderCodeRoutes({ codes: orderCodes, env: process.env, readJson, sendJson, getAdminSession });
 const codeConfirmation = pgPool ? createCodeConfirmationService({ pool: pgPool, codes: orderCodes }) : null;
 const defaultModel = process.env.HF_IMAGE_MODEL || "black-forest-labs/FLUX.1-schnell";
 const defaultArkModel = process.env.ARK_IMAGE_MODEL || "seedream-4-5-251128";
@@ -55,7 +61,6 @@ const server = http.createServer(async (req, res) => {
     url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
     res.errorContext = requestErrorContext(req, url);
     if (await codeRoutes(req, res, url)) return;
-    /*
     if (req.method === "POST" && url.pathname === "/api/admin/login") {
       await handleAdminLogin(req, res);
       return;
@@ -68,18 +73,25 @@ const server = http.createServer(async (req, res) => {
       await handleAdminSession(req, res);
       return;
     }
-    */
-    // Temporarily bypass admin auth while checking Railway/admin routing.
-    // Restore this guard before production admin access is opened.
-    // if (await rejectUnauthenticatedAdminRequest(req, res, url)) {
-    //   return;
-    // }
-    /*
+    if (await rejectUnauthenticatedAdminRequest(req, res, url)) return;
+    if (url.pathname === "/api/admin/template-editor") {
+      if (!templateAdminService) { sendJson(res, 503, {ok:false,error:"PostgreSQL is required"}); return; }
+      try {
+        let result;
+        if (req.method === "GET") result = await templateAdminService.detail(url.searchParams.get("source"), url.searchParams.get("id"));
+        else if (["POST", "PATCH"].includes(req.method)) {
+          const body = await readJson(req);
+          if (req.method === "PATCH" && !body.id) throw new Error("Template ID is required");
+          result = await templateAdminService.save(body.source, req.method === "PATCH" ? body.id : null, body.item || {});
+        } else { sendJson(res,405,{ok:false,error:"Method not allowed"}); return; }
+        sendJson(res,200,result,{"Cache-Control":"no-store"});
+      } catch(error) { sendJson(res,400,{ok:false,error:error.message},{"Cache-Control":"no-store"}); }
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/admin/create-account") {
       await handleAdminCreateAccount(req, res);
       return;
     }
-    */
     if (req.method === "POST" && url.pathname === "/api/ai-generate") {
       await handleAiGenerate(req, res);
       return;
@@ -134,6 +146,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/user/promos") {
       await handleUserPromos(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/user/orders") {
+      await handleUserOrders(req, res);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/user/print-records") {
@@ -1830,7 +1846,7 @@ async function handlePgAdminModels() {
     deviceInfo,
   ] = await Promise.all([
     loadPgTaxonomy(),
-    loadPgTemplates(),
+    loadPgTemplates(true),
     loadPgProducts(),
     safePgRows("SELECT * FROM rewards ORDER BY created_at DESC"),
     loadPgEvents(),
@@ -1861,7 +1877,7 @@ async function handlePgAdminModels() {
     design_type: item.design_type,
     nail_shape: item.nail_shape,
     material_type: item.material_type,
-    status: "active",
+    status: item.status,
     image: item.image_url,
     image_url: item.image_url,
     image_preview_url: item.image_url,
@@ -1878,7 +1894,7 @@ async function handlePgAdminModels() {
     nail_shape: item.nail_shape,
     material_type: item.material_type,
     author_display_name: item.author_display_name,
-    status: "active",
+    status: item.status,
     image: item.image_url,
     image_url: item.image_url,
     image_preview_url: item.image_url,
@@ -2685,6 +2701,18 @@ async function handleUserPromos(req, res) {
   }
 }
 
+async function handleUserOrders(req, res) {
+  const headers = { "Cache-Control": "no-store" };
+  if (!userOrdersService) { sendJson(res, 503, { ok: false, error: "Order history is temporarily unavailable." }, headers); return; }
+  try {
+    const result = await userOrdersService(await readJson(req));
+    sendJson(res, result.ok ? 200 : 401, result, headers);
+  } catch (error) {
+    console.error("User order history failed:", error.message);
+    sendJson(res, 500, { ok: false, error: "Unable to load orders. Please try again." }, headers);
+  }
+}
+
 async function handleUserPrintRecords(req, res) {
   const body = await readJson(req);
   try {
@@ -2818,11 +2846,10 @@ async function handleUserDraft(req, res, url) {
   }
 }
 
-/*
 async function handleAdminLogin(req, res) {
   const body = await readJson(req);
   try {
-    const result = await runPythonJsonScript(path.join(root, "database", "admin_auth.py"), {
+    const result = await runAdminAuth({
       action: "login",
       adminId: body.adminId,
       password: body.password,
@@ -2843,7 +2870,7 @@ async function handleAdminLogin(req, res) {
 
 async function handleAdminLogout(req, res) {
   try {
-    await runPythonJsonScript(path.join(root, "database", "admin_auth.py"), {
+    await runAdminAuth({
       action: "logout",
       token: adminSessionToken(req),
     });
@@ -2868,7 +2895,7 @@ async function handleAdminCreateAccount(req, res) {
     return;
   }
   try {
-    const result = await runPythonJsonScript(path.join(root, "database", "admin_auth.py"), {
+    const result = await runAdminAuth({
       action: "create_admin",
       adminId: body.adminId,
       displayName: body.displayName,
@@ -2881,7 +2908,6 @@ async function handleAdminCreateAccount(req, res) {
     sendJson(res, 500, { ok: false, error: error.message || "Failed to create admin account." });
   }
 }
-*/
 
 async function handleAdminImportProduct(req, res) {
   const body = await readJson(req);
@@ -3273,7 +3299,7 @@ async function loadPgTaxonomy() {
   };
 }
 
-async function loadPgTemplates() {
+async function loadPgTemplates(admin = false) {
   const [assets, templateLinks, galleryLinks] = await Promise.all([
     pgAssetMap(),
     pgTaxonomyMap("template"),
@@ -3289,6 +3315,8 @@ async function loadPgTemplates() {
     SELECT
       t.template_id,
       t.source_type,
+      t.status,
+      t.visibility,
       t.template_name,
       t.template_title,
       t.description,
@@ -3316,7 +3344,7 @@ async function loadPgTemplates() {
       COALESCE(a.mime_type, '') AS image_mime_type
     FROM templates t
     LEFT JOIN assets a ON a.asset_id = COALESCE(t.cover_asset_id, t.image_asset_id)
-    WHERE t.status='active' AND t.visibility='public' AND t.source_type IN ('official', 'community')
+    WHERE ${admin ? "" : "t.status='active' AND t.visibility='public' AND"} t.source_type IN ('official', 'community')
     ORDER BY COALESCE(t.published_at, t.created_at) DESC
   `);
   return items.map((item) => {
@@ -4476,26 +4504,28 @@ function parseCookies(req) {
     }));
 }
 
-/*
+function runAdminAuth(payload) {
+  return pgAdminAuth ? pgAdminAuth(payload) : runPythonJsonScript(path.join(root, "database", "admin_auth.py"), payload);
+}
+
 function adminSessionToken(req) {
   return parseCookies(req)[adminCookieName] || "";
 }
 
 async function getAdminSession(req) {
-  return runPythonJsonScript(path.join(root, "database", "admin_auth.py"), {
+  return runAdminAuth({
     action: "session",
     token: adminSessionToken(req),
   });
 }
 
 function isAdminProtectedRequest(url) {
-  if (url.pathname === "/admin.html") return true;
+  if (["/admin.html", "/admin-create-account.html"].includes(url.pathname)) return true;
   if (!url.pathname.startsWith("/api/admin/")) return false;
   return ![
     "/api/admin/login",
     "/api/admin/logout",
     "/api/admin/session",
-    "/api/admin/create-account",
     "/api/admin/product-image",
   ].includes(url.pathname);
 }
@@ -4504,7 +4534,7 @@ async function rejectUnauthenticatedAdminRequest(req, res, url) {
   if (!isAdminProtectedRequest(url)) return false;
   const result = await getAdminSession(req);
   if (result.ok) return false;
-  if (url.pathname === "/admin.html") {
+  if (["/admin.html", "/admin-create-account.html"].includes(url.pathname)) {
     res.writeHead(302, {
       Location: `/admin-login.html?return=${encodeURIComponent(url.pathname)}`,
       "Cache-Control": "no-store",
@@ -4515,7 +4545,6 @@ async function rejectUnauthenticatedAdminRequest(req, res, url) {
   sendJson(res, 401, { ok: false, error: "Admin login required." }, { "Cache-Control": "no-store" });
   return true;
 }
-*/
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
