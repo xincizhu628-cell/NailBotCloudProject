@@ -6,8 +6,18 @@
       ...(data ? { body: JSON.stringify({ type, ...data }) } : {})
     });
     if (response.status === 401) {
-      location.href = '/admin-login.html?return=' + encodeURIComponent('/admin.html');
-      throw new Error('登录已过期，请重新登录后台。');
+      // An individual module can reject an old token scheme without expiring the login cookie.
+      let session;
+      try { session = await fetch('/api/admin/session', { credentials:'same-origin', cache:'no-store' }); }
+      catch { throw new Error('暂时无法验证后台登录状态，请稍后刷新。'); }
+      if (session.status === 401) {
+        location.replace('/admin-login.html?return=' + encodeURIComponent('/admin.html'));
+        throw new Error('登录已过期，请重新登录后台。');
+      }
+      if (!session.ok) throw new Error('后台会话验证暂时不可用，请稍后刷新。');
+      const verified = await session.json();
+      if (!verified.ok) throw new Error('无法确认后台登录状态，请稍后刷新。');
+      throw new Error('后台登录正常，但码接口拒绝访问。请同步部署 services/orderCodeRoutes.js，移除旧管理员令牌认证。');
     }
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || 'Request failed');
