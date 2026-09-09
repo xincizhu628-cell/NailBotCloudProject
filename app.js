@@ -4154,6 +4154,7 @@ function startCampaignCarousel() {
 }
 
 function renderAll() {
+  renderGalleryAssets();
   renderCampaignCarousels();
   renderHomeProducts();
   renderPosts();
@@ -7780,7 +7781,11 @@ document.addEventListener("click", async (event) => {
   }
 
   const libraryAsset = event.target.closest("[data-library-asset]");
-  if (libraryAsset) importAssetToCanvas(libraryAsset.dataset.libraryAsset);
+  if (libraryAsset) {
+    const template=(publicCatalog?.templates || []).find(item=>String(item.template_id)===libraryAsset.dataset.libraryAsset && item.template_type==='asset');
+    const image=templateImageSource(template)||template?.image_url;
+    if(image) importAssetToCanvas(template.template_name || 'template', image);
+  }
 
   const layerMenu = event.target.closest("[data-layer-menu]");
   if (layerMenu) {
@@ -9119,4 +9124,14 @@ async function refreshCartPricing(){
  $('#cart-subtotal').textContent=money(q.subtotal);$('#cart-discount').textContent=`-${money(q.discount)}`;$('#cart-total').textContent=money(q.total);
  document.querySelectorAll('.cart-line-side b').forEach((el,i)=>{if(q.items[i])el.textContent=money(q.items[i].lineTotal);});
  }catch(e){if(version===cartPricingRequest){$('#cart-total').textContent='计价失败，请重试';$('#cart-discount').textContent='—';}}
+}
+
+function renderGalleryAssets() {
+ const list=document.getElementById('gallery-asset-list');if(!list)return;
+ list.replaceChildren();
+ const templates=(publicCatalog?.templates || []).filter(item=>item.template_type==='asset');
+ if(!templates.length){const text=document.createElement('p');text.textContent=publicCatalogLoaded?(lang==='zh'?'暂无可用素材模板':'No asset templates available'):(lang==='zh'?'正在加载素材…':'Loading assets…');list.append(text);return;}
+ for(const item of templates){const button=document.createElement('button');button.type='button';button.dataset.libraryAsset=String(item.template_id);const source=templateImageSource(item)||item.image_url;
+ const image=document.createElement('img');image.className='asset-thumb';image.alt='';image.loading='lazy';image.style.objectFit='contain';if(source)image.src=source;else button.disabled=true;
+ const name=document.createElement('strong');name.textContent=item.template_name||item.template_title||item.template_id;button.append(image,name);list.append(button);}
 }

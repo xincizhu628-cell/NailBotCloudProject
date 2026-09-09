@@ -3365,6 +3365,7 @@ async function loadPgTemplates(admin = false) {
       t.template_name,
       t.template_title,
       t.description,
+      t.template_type,
       t.design_type,
       t.nail_shape,
       t.material_type,

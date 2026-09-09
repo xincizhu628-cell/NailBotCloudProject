@@ -399,15 +399,6 @@
                   <span data-i18n="listView">List</span>
                 </div>
                 <div class="dynamic-panel active" id="material-panel">
-                  <button class="color-wheel" id="material-color-wheel" aria-label="Open color wheel"></button>
-                  <div class="swatch-grid" id="material-swatches">
-                    <button class="swatch active" data-color="#ffe4ef" style="--swatch:#ffe4ef" aria-label="Pearl pink"></button>
-                    <button class="swatch" data-color="#cfd8ff" style="--swatch:#cfd8ff" aria-label="Chrome blue"></button>
-                    <button class="swatch" data-color="#d9fff7" style="--swatch:#d9fff7" aria-label="Glass mint"></button>
-                    <button class="swatch" data-color="#df5e93" style="--swatch:#df5e93" aria-label="Velvet rose"></button>
-                    <button class="swatch" data-color="#8c7cff" style="--swatch:#8c7cff" aria-label="Holographic violet"></button>
-                    <button class="swatch" data-color="#fff8fb" style="--swatch:#fff8fb" aria-label="Milk white"></button>
-                  </div>
                   <p class="panel-subtitle" data-i18n="materialList">Material List</p>
                   <div class="material-grid">
                     <button class="material-tile active" data-material="m123"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="" /><strong data-i18n="material123">123 White Nail</strong></button>
@@ -454,11 +445,7 @@
                   </label>
                   <input class="hidden-file" id="local-asset-input" type="file" accept="image/*" />
                   <p class="panel-subtitle" data-i18n="libraryAssets">Gallery Assets</p>
-                  <div class="import-list">
-                    <button data-library-asset="petal"><span class="asset-thumb petal"></span><strong data-i18n="assetPetal">Petal Outline</strong></button>
-                    <button data-library-asset="star"><span class="asset-thumb star"></span><strong data-i18n="assetStar">Future Star</strong></button>
-                    <button data-library-asset="ribbon"><span class="asset-thumb ribbon"></span><strong data-i18n="assetRibbon">Soft Ribbon</strong></button>
-                  </div>
+                  <div class="import-list" id="gallery-asset-list" aria-live="polite"></div>
                 </div>
               </aside>
               <button class="show-right-panel hidden" id="show-right-panel" aria-label="Show right panel">◉</button>
@@ -1042,7 +1029,7 @@
         <button class="eyedropper-btn" id="eyedropper-btn" title="Eyedropper">◎</button>
       </div>
     </div>
-    <script src="app.js?v=126"></script>
+    <script src="app.js?v=127"></script>
   </body>
 </html>
 
