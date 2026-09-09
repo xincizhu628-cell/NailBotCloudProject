@@ -517,7 +517,7 @@
           };
         }).filter(Boolean);
         const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-        const discount = subtotal >= 120 ? subtotal * 0.12 : subtotal >= 80 ? 8 : 0;
+        const discount = 0;
         return {
           mode: "cart",
           createdAt: new Date().toISOString(),
@@ -567,7 +567,7 @@
               <strong>${item.name || item.id}</strong>
               <small>${item.id} · Size ${item.size || "M"} x ${item.qty}</small>
             </div>
-            <b>${money((item.price || 0) * (item.qty || 1))}</b>
+            <b>${money(item.lineTotal ?? ((item.price || 0) * (item.qty || 1)))}</b>
           </div>
         `).join("");
 
@@ -637,6 +637,9 @@
         setStatus("Creating payment...", "");
 
         try {
+          const oldKey=state.draft.pricingKey;
+          await refreshQuote();
+          if(oldKey!==state.draft.pricingKey)throw Error('Prices changed. Review the updated total and pay again.');
           const sourceId = state.config?.enabled ? await tokenizeCard() : "";
           const buyer = collectBuyer();
           const payload = await loadJson("/api/square-payment", {
@@ -645,6 +648,7 @@
             body: JSON.stringify({
               sourceId,
               amount: state.draft.total,
+              pricingKey: state.draft.pricingKey,
               currency: state.draft.currency || "AUD",
               buyer,
               note: buyer.orderNote || "AI Nail Studio checkout",
@@ -669,10 +673,16 @@
         }
       }
 
+      async function refreshQuote() {
+        if(!state.draft?.items?.length)throw Error('Your basket is empty');
+        const q=await loadJson('/api/checkout-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:state.draft.items})});
+        Object.assign(state.draft,q);renderDraft();
+      }
       async function boot() {
         try {
           await Promise.all([loadConfig(), loadCatalog()]);
           loadDraft();
+          await refreshQuote();
           renderDraft();
           await loadSquareSdk();
         } catch (error) {

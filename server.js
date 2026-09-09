@@ -15,6 +15,7 @@ const { createUserOrdersService } = require("./services/userOrdersService");
 const { createAdminAuthService } = require("./services/adminAuthService");
 const { createOrderCodeRoutes } = require("./services/orderCodeRoutes");
 
+const { createPromotionPricingService } = require('./services/promotionPricingService');
 const root = path.resolve(__dirname || process.cwd());
 loadEnvFile(path.join(root, ".env"));
 const bundledPython = path.join(os.homedir(), ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "python.exe");
@@ -26,6 +27,7 @@ const pgPool = databaseUrl ? new Pool({
   connectionString: databaseUrl,
   ssl: String(process.env.DATABASE_SSL || "true").toLowerCase() === "false" ? false : { rejectUnauthorized: false },
 }) : null;
+const promotionPricing = pgPool ? createPromotionPricingService(pgPool) : null;
 const orderCodes = pgPool ? createOrderCodeService(pgPool) : null;
 const templateAdminService = pgPool ? createTemplateAdminService(pgPool) : null;
 const userOrdersService = pgPool ? createUserOrdersService({ pool: pgPool, getSession: getPgAuthSession }) : null;
@@ -219,6 +221,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/square-config") {
       await handleSquareConfig(req, res);
       return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/checkout-quote") {
+      try { if (!promotionPricing) throw new Error("Product pricing database is unavailable"); const body=await readJson(req); sendJson(res,200,await promotionPricing.quote(body.items),{"Cache-Control":"no-store"}); }
+      catch(error){sendJson(res,400,{ok:false,error:error.message});} return;
     }
     if (req.method === "POST" && url.pathname === "/api/square-payment") {
       await handleSquarePayment(req, res);
@@ -489,6 +495,13 @@ async function handleSquareConfig(req, res) {
 
 async function handleSquarePayment(req, res) {
   const body = await readJson(req);
+  if (!promotionPricing) {sendJson(res,503,{ok:false,error:"Product pricing database is unavailable"});return;}
+  let quote;
+  try {quote=await promotionPricing.quote(body.items);}catch(error){sendJson(res,400,{ok:false,error:error.message});return;}
+  if(body.pricingKey!==quote.pricingKey || Math.round(Number(body.amount)*100)!==Math.round(quote.total*100)) {
+    sendJson(res,409,{ok:false,error:"Prices or promotions changed. Review the refreshed total and pay again.",quote});return;
+  }
+  body.amount=quote.total;body.items=quote.items;body.currency=squarePaymentService.browserConfig().currency;
   const result = await squarePaymentService.createPayment(body);
   if (result.body?.ok && result.httpStatus >= 200 && result.httpStatus < 300) {
     try {
@@ -1849,7 +1862,7 @@ async function handlePgAdminModels() {
     loadPgTemplates(true),
     loadPgProducts(),
     safePgRows("SELECT * FROM rewards ORDER BY created_at DESC"),
-    loadPgEvents(),
+    safePgRows("SELECT e.*,p.promo_scope,p.target_product_ids,p.discount_type,p.discount_value,p.min_spend,p.max_discount,p.stackable FROM events e LEFT JOIN promotion_discount_events p ON p.event_id=e.event_id ORDER BY e.created_at DESC"),
     safePgRows("SELECT * FROM tasks ORDER BY created_at DESC"),
     safePgRows("SELECT promo_asset_id, image_url, image_base64, created_at FROM promotional_assets ORDER BY created_at DESC"),
     safePgRows("SELECT * FROM promotion ORDER BY created_at DESC"),
@@ -2044,7 +2057,14 @@ async function handlePgAdminModels() {
       event: adminModel("Events", "event_id", events, {
         columns: ["event_id", "event_name", "event_type", "html_url", "start_at", "expires_at", "status"],
         fields: [
-          { name: "event_type", label: "Event type", type: "text" },
+          { name: "event_type", label: "Event type", type: "select", options: ["general","community_interaction","external_social","design_collection","promotion_discount"].map(value=>({value,label:value==="promotion_discount"?"优惠促销活动":value})) },
+          { name: "promo_scope", label: "优惠范围", type: "select", options: ["all_products","selected_products"].map(value=>({value,label:value})) },
+          { name: "target_product_ids", label: "指定商品 ID（逗号分隔）", type: "text" },
+          { name: "discount_type", label: "优惠方式", type: "select", options: ["percent_off","threshold_amount_off","fixed_price"].map(value=>({value,label:value})) },
+          { name: "discount_value", label: "优惠值（百分比减免 / 减免金额 / 命中商品合计优惠价）", type: "number" },
+          { name: "min_spend", label: "命中商品最低消费", type: "number" },
+          { name: "max_discount", label: "最高减免（留空不限）", type: "number" },
+          { name: "stackable", label: "可与其他可叠加活动叠加", type: "select", options:[{value:"0",label:"否"},{value:"1",label:"是"}] },
           { name: "event_name", label: "Event name", type: "text" },
           { name: "event_title", label: "Title", type: "text" },
           { name: "event_content", label: "Content", type: "textarea" },
@@ -2342,7 +2362,35 @@ function pgPromotionContent(item) {
   return JSON.stringify(content);
 }
 
+async function savePromotionEvent(item,id) {
+  const c=await pgPool.connect();
+  try {
+    await c.query('BEGIN');
+    const old=id?(await c.query('SELECT * FROM events WHERE event_id=$1 FOR UPDATE',[id])).rows[0]:null;
+    if(id&&!old)throw new Error('Event not found');
+    const data={...old,...item};
+    for(const key of ['start_at','expires_at'])if(data[key]&&Number.isNaN(Date.parse(data[key])))throw new Error('Invalid activity date');
+    if(data.start_at&&data.expires_at&&Date.parse(data.start_at)>=Date.parse(data.expires_at))throw new Error('Expiry must follow start');
+    let asset=data.promo_asset_id||null;
+    if(item.image_base64||item.image_url)asset=(await c.query('INSERT INTO promotional_assets(image_url,image_base64) VALUES($1,$2) RETURNING promo_asset_id',[cleanPgText(item.image_url),pgDataUrlOrBase64(item.image_base64)])).rows[0].promo_asset_id;
+    const values=[data.event_type||'general',data.event_name||'Untitled Event',data.event_title||null,data.event_content||null,asset,data.html_url||null,data.start_at||null,data.expires_at||null,data.status||'active',pgInteger(data.sort_order)];
+    const row=id?(await c.query('UPDATE events SET event_type=$1,event_name=$2,event_title=$3,event_content=$4,promo_asset_id=$5,html_url=$6,start_at=$7,expires_at=$8,status=$9,sort_order=$10 WHERE event_id=$11 RETURNING event_id',[...values,id])).rows[0]:(await c.query('INSERT INTO events(event_type,event_name,event_title,event_content,promo_asset_id,html_url,start_at,expires_at,status,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING event_id',values)).rows[0];
+    if(data.event_type==='promotion_discount') {
+      const previous=(await c.query('SELECT * FROM promotion_discount_events WHERE event_id=$1',[row.event_id])).rows[0]||{};
+      const rule={...previous,...item};const scope=rule.promo_scope||'all_products',type=rule.discount_type||'percent_off';
+      const targets=require('./services/promotionPricingService').ids(rule.target_product_ids);
+      if(!['all_products','selected_products'].includes(scope)||!['percent_off','threshold_amount_off','amount_off','fixed_price'].includes(type))throw new Error('Invalid promotion rule');
+      if(scope==='selected_products') {if(!targets.length)throw new Error('Select at least one product');const found=(await c.query('SELECT product_id FROM products WHERE product_id=ANY($1::text[])',[targets])).rows;if(found.length!==new Set(targets).size)throw new Error('Selected product does not exist');}
+      const value=Number(rule.discount_value||0),min=Number(rule.min_spend||0),cap=rule.max_discount==null||rule.max_discount===''?null:Number(rule.max_discount);
+      if(![value,min,...(cap===null?[]:[cap])].every(n=>Number.isFinite(n)&&n>=0)||type==='percent_off'&&value>100)throw new Error('Invalid discount value');
+      await c.query(`INSERT INTO promotion_discount_events(event_id,promo_scope,target_product_ids,discount_type,discount_value,min_spend,max_discount,stackable,price_rule_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(event_id) DO UPDATE SET promo_scope=EXCLUDED.promo_scope,target_product_ids=EXCLUDED.target_product_ids,discount_type=EXCLUDED.discount_type,discount_value=EXCLUDED.discount_value,min_spend=EXCLUDED.min_spend,max_discount=EXCLUDED.max_discount,stackable=EXCLUDED.stackable,price_rule_json=EXCLUDED.price_rule_json`,[row.event_id,scope,JSON.stringify(scope==='selected_products'?targets:[]),type,value,min,cap,Number(rule.stackable)===1?1:0,JSON.stringify({discount_type:type,discount_value:value,min_spend:min,target_product_ids:targets})]);
+    } else await c.query('DELETE FROM promotion_discount_events WHERE event_id=$1',[row.event_id]);
+    await c.query('COMMIT');return {ok:true,id:row.event_id,rows:(await pgPool.query('SELECT e.*,p.promo_scope,p.target_product_ids,p.discount_type,p.discount_value,p.min_spend,p.max_discount,p.stackable FROM events e LEFT JOIN promotion_discount_events p ON p.event_id=e.event_id ORDER BY e.created_at DESC')).rows};
+  }catch(error){await c.query('ROLLBACK');throw error;}finally{c.release();}
+}
+
 async function handlePgAdminCreateRecord(body) {
+  if(body.module === "event") return savePromotionEvent(body.item || {});
   const moduleName = String(body.module || "").trim();
   const item = body.item || {};
   if (moduleName === "promo-assets") {
@@ -2499,10 +2547,7 @@ async function handlePgAdminRecordMutation(body, action) {
   if (moduleName === "promotion") {
     await handlePgAdminCreateRecord({ module: "promotion", item: { ...item, promo_id: id } });
   } else if (moduleName === "event") {
-    await pgPool.query(
-      "UPDATE events SET event_type=COALESCE(NULLIF($1, ''), event_type), event_name=COALESCE(NULLIF($2, ''), event_name), event_title=$3, event_content=$4, html_url=$5, start_at=$6, expires_at=$7, status=COALESCE(NULLIF($8, ''), status), sort_order=$9 WHERE event_id=$10",
-      [cleanPgText(item.event_type), cleanPgText(item.event_name || item.name), cleanPgText(item.event_title || item.title), cleanPgText(item.event_content || item.content), cleanPgText(item.html_url), cleanPgText(item.start_at || item.start_date), cleanPgText(item.expires_at || item.expire_date), cleanPgText(item.status), pgInteger(item.sort_order), id],
-    );
+    return savePromotionEvent(item,id);
   } else if (moduleName === "task") {
     await pgPool.query(
       "UPDATE tasks SET task_type=COALESCE(NULLIF($1, ''), task_type), task_name=COALESCE(NULLIF($2, ''), task_name), task_title=$3, task_content=$4, submission_type=COALESCE(NULLIF($5, ''), submission_type), allowed_platforms=$6, reward_points=$7, start_at=$8, expires_at=$9, status=COALESCE(NULLIF($10, ''), status) WHERE task_id=$11",

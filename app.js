@@ -4450,7 +4450,7 @@ function checkoutSnapshot(mode = "cart") {
     };
   }).filter(Boolean);
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const discount = subtotal >= 120 ? subtotal * 0.12 : subtotal >= 80 ? 8 : 0;
+  const discount = 0;
   return {
     mode,
     createdAt: new Date().toISOString(),
@@ -4930,11 +4930,12 @@ function renderCart() {
     if (!product) return sum;
     return sum + product.price * line.qty;
   }, 0);
-  const discount = subtotal >= 120 ? subtotal * 0.12 : subtotal >= 80 ? 8 : 0;
+  const discount = 0;
   $("#cart-subtotal").textContent = money(subtotal);
   $("#cart-discount").textContent = `-${money(discount)}`;
   $("#cart-total").textContent = money(Math.max(0, subtotal - discount));
   persistProductCart();
+  refreshCartPricing();
 }
 
 function openCart() {
@@ -9109,3 +9110,13 @@ window.addEventListener("scroll", updateMemberStickyLabel, { passive: true });
 window.addEventListener("resize", updateMemberStickyLabel);
 window.addEventListener("load", initFabricDesigner);
 if (window.fabric) initFabricDesigner();
+
+var cartPricingRequest;
+async function refreshCartPricing(){
+ const version=cartPricingRequest=(cartPricingRequest||0)+1;const items=checkoutSnapshot().items;if(!items.length)return;
+ $('#cart-discount').textContent='…';$('#cart-total').textContent='…';
+ try{const r=await fetch('/api/checkout-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});const q=await r.json();if(!r.ok||!q.ok)throw Error(q.error);if(version!==cartPricingRequest)return;
+ $('#cart-subtotal').textContent=money(q.subtotal);$('#cart-discount').textContent=`-${money(q.discount)}`;$('#cart-total').textContent=money(q.total);
+ document.querySelectorAll('.cart-line-side b').forEach((el,i)=>{if(q.items[i])el.textContent=money(q.items[i].lineTotal);});
+ }catch(e){if(version===cartPricingRequest){$('#cart-total').textContent='计价失败，请重试';$('#cart-discount').textContent='—';}}
+}
