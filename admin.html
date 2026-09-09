@@ -1786,6 +1786,11 @@
         }
       }
 
+      window.addEventListener('order-updated', event => {
+        const rows=adminModelState.orders?.rows;
+        const row=rows?.find(r=>r.order_id===event.detail.order_id);
+        if(row){Object.assign(row,event.detail);renderAdminDataTable('orders');}
+      });
       window.addEventListener('template-saved', async event => {
         await loadAdminModels();
         renderAdminDataTable(event.detail.source);
@@ -1973,11 +1978,12 @@
         const page = Math.min(Math.max(1, adminTablePages[view] || 1), totalPages);
         adminTablePages[view] = page;
         const visibleRows = rows.slice((page - 1) * adminTablePageSize, page * adminTablePageSize);
-        const actionHead = model.editable ? "<th>Actions</th>" : "";
+        const actionHead = (model.editable || view === "orders") ? "<th>Actions</th>" : "";
         section.querySelector(".admin-record-table thead").innerHTML = `<tr>${columns.map((column) => `<th>${column}</th>`).join("")}${actionHead}</tr>`;
         section.querySelector(".admin-record-table tbody").innerHTML = visibleRows.map((row) => `
           <tr>
             ${columns.map((column) => `<td>${renderAdminTableCell(row, column)}</td>`).join("")}
+            ${view === "orders" ? `<td><button class="row-action detail" type="button" data-order-detail="${escapeHtml(row.order_id)}">查看详情</button></td>` : ""}
             ${model.editable ? `<td>
               <div class="row-actions">
                 ${view === "users" ? `<button class="row-action detail" type="button" data-user-detail="${escapeHtml(row[model.idKey || "id"])}">详情</button>` : ""}
@@ -1986,7 +1992,7 @@
               </div>
             </td>` : ""}
           </tr>
-        `).join("") || `<tr><td colspan="${columns.length + (model.editable ? 1 : 0) || 1}">No data.</td></tr>`;
+        `).join("") || `<tr><td colspan="${columns.length + ((model.editable || view === "orders") ? 1 : 0) || 1}">No data.</td></tr>`;
         const pagination = section.querySelector(`[data-admin-pagination="${view}"]`);
         if (pagination) {
           pagination.innerHTML = rows.length > adminTablePageSize ? `
@@ -2953,6 +2959,7 @@
         }
       });
     </script>
+    <script src="assets/js/admin-orders.js?v=20260909"></script>
     <script src="assets/js/admin-order-codes.js?v=20260909-session-fix"></script>
   <script src="assets/js/admin-template-editor.js?v=20260909"></script>
   </body>

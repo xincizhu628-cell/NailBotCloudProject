@@ -11,11 +11,20 @@ async function main() {
   const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false } });
   await client.connect();
   try {
-    if (process.argv.includes('--apply')) {
+    if (process.argv.includes('--apply-fulfillment')) {
+      await client.query('BEGIN');
+      try {
+        await client.query('SELECT pg_advisory_xact_lock(73612096)');
+        await client.query(fs.readFileSync(path.join(root,'database/migrations/20260909_order_fulfillment.sql'),'utf8'));
+        await client.query('COMMIT');
+        console.log('Order fulfillment migration applied');
+      } catch(error){await client.query('ROLLBACK');throw error;}
+    } else if (process.argv.includes('--apply')) {
       await client.query('BEGIN');
       try {
         await client.query("SELECT pg_advisory_xact_lock(73612095)");
         await client.query(fs.readFileSync(path.join(root,'database/migrations/20260907_order_codes.sql'),'utf8'));
+        await client.query(fs.readFileSync(path.join(root,'database/migrations/20260907_unbound_order_codes.sql'),'utf8'));
         await client.query('COMMIT');
       } catch(error) { await client.query('ROLLBACK'); throw error; }
       console.log('Order-code migration applied');

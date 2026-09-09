@@ -7,7 +7,7 @@ function createUserOrdersService({ pool, getSession }) {
     const pageSize = 20;
     const result = await pool.query(`
       SELECT o.order_id, o.total_price, o.pay_method, o.payment_status, o.delivery_status,
-             o.order_status, o.print_code,
+             o.order_get_type, o.pickup_status, o.print_code,
              COALESCE((SELECT pc.code FROM "pickup-code" pc WHERE pc.order_id=o.order_id),NULLIF(o.pickup_code,'000000')) AS pickup_code,
              o.created_at, o.paid_at,
              COALESCE((SELECT json_agg(json_build_object('product_id',i.product_id,

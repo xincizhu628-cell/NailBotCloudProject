@@ -16,6 +16,7 @@ const { createAdminAuthService } = require("./services/adminAuthService");
 const { createOrderCodeRoutes } = require("./services/orderCodeRoutes");
 
 const { createPromotionPricingService } = require('./services/promotionPricingService');
+const { createOrderManagementService, orderGetType } = require('./services/orderManagementService');
 const root = path.resolve(__dirname || process.cwd());
 loadEnvFile(path.join(root, ".env"));
 const bundledPython = path.join(os.homedir(), ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "python.exe");
@@ -28,6 +29,7 @@ const pgPool = databaseUrl ? new Pool({
   ssl: String(process.env.DATABASE_SSL || "true").toLowerCase() === "false" ? false : { rejectUnauthorized: false },
 }) : null;
 const promotionPricing = pgPool ? createPromotionPricingService(pgPool) : null;
+const orderManagement = pgPool ? createOrderManagementService(pgPool) : null;
 const orderCodes = pgPool ? createOrderCodeService(pgPool) : null;
 const templateAdminService = pgPool ? createTemplateAdminService(pgPool) : null;
 const userOrdersService = pgPool ? createUserOrdersService({ pool: pgPool, getSession: getPgAuthSession }) : null;
@@ -86,6 +88,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (await rejectUnauthenticatedAdminRequest(req, res, url)) return;
+    if (url.pathname === '/api/admin/order-detail') {
+      if(!orderManagement){sendJson(res,503,{ok:false,error:'Database unavailable'});return;}
+      try {
+        let result;
+        if(req.method==='GET')result=await orderManagement.detail(url.searchParams.get('id'));
+        else if(req.method==='PATCH'){const body=await readJson(req);result=await orderManagement.update(body.id,body);}
+        else {sendJson(res,405,{ok:false,error:'Method not allowed'});return;}
+        sendJson(res,200,result,{'Cache-Control':'no-store'});
+      }catch(error){sendJson(res,400,{ok:false,error:error.message},{'Cache-Control':'no-store'});}
+      return;
+    }
     if (url.pathname === "/api/admin/template-editor") {
       if (!templateAdminService) { sendJson(res, 503, {ok:false,error:"PostgreSQL is required"}); return; }
       try {
@@ -597,7 +610,7 @@ async function ensurePrintServiceProduct(client, items) {
     )
     VALUES ('PRINT-SERVICE', 'printing_nail', 'AI Nail Print Service (printing available)', $1, 'Printable nail order service', 9999, 9999, 9999, 9999, 9999, 'pickup', 'active')
     ON CONFLICT (product_id) DO UPDATE SET product_type=EXCLUDED.product_type, product_name=EXCLUDED.product_name
-    RETURNING product_id, product_type, product_name, unit_price, bound_device_id
+    RETURNING product_id, product_type, product_name, unit_price, bound_device_id, pickup_method
     `,
     [pgNumber(items.find((item) => item.isPrintService)?.price, 0)],
   )).rows[0];
@@ -633,7 +646,7 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
     const serviceRow = await ensurePrintServiceProduct(client, items);
     const productRows = (await client.query(
       `
-      SELECT product_id, product_type, product_name, unit_price, bound_device_id
+      SELECT product_id, product_type, product_name, unit_price, bound_device_id, pickup_method
       FROM products
       WHERE product_id = ANY($1::text[])
       `,
@@ -650,17 +663,17 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
     await client.query(
       `
       INSERT INTO orders (
-        order_id, user_id, total_price, pay_method, payment_status, delivery_status, order_status,
+        order_id, user_id, total_price, pay_method, payment_status, order_get_type,
         paid_at, pickup_code, print_code, bound_device_id, payment_provider_id,
         manufacturer_sync_status
       )
-      VALUES ($1, $2, $3, 'square', 'paid', $4, 'paid', CURRENT_TIMESTAMP, $5, $6, $7, $8, 'pending')
+      VALUES ($1, $2, $3, 'square', 'paid', $4, CURRENT_TIMESTAMP, $5, $6, $7, $8, 'pending')
       `,
       [
         orderId,
         userId,
         pgNumber(body.amount || payment.amount),
-        boundDeviceId ? "pickup_pending" : "delivery_pending",
+        orderGetType(rows),
         pickupCode,
         printCode,
         boundDeviceId,
@@ -684,7 +697,7 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
           quantity,
           pgNumber(item.price || product.unit_price),
           cleanPgText(item.size),
-          JSON.stringify({ ...item, product_name: product.product_name }),
+          JSON.stringify({ ...item, product_name: product.product_name, pickup_method: product.pickup_method }),
         ],
       );
     }
@@ -1447,7 +1460,8 @@ async function handlePgUserPrintRecords(body) {
       o.total_price,
       o.payment_status,
       o.delivery_status,
-      o.order_status,
+      o.pickup_status,
+      o.order_get_type,
       o.created_at,
       o.paid_at,
       o.pickup_code,
@@ -1481,7 +1495,8 @@ async function handlePgUserPrintRecords(body) {
       totalPrice: Number(item.total_price || 0),
       paymentStatus: item.payment_status || "",
       deliveryStatus: item.delivery_status || "",
-      orderStatus: item.order_status || "",
+      pickupStatus: item.pickup_status || "",
+      orderGetType: item.order_get_type || "",
       createdAt: item.created_at,
       paidAt: item.paid_at,
       pickupCode: item.pickup_code || "",
@@ -1876,7 +1891,7 @@ async function handlePgAdminModels() {
     safePgRows("SELECT user_id, username, user_kind, recovery_code, email, phone, gender, created_at, last_seen_at FROM users ORDER BY created_at DESC"),
     safePgRows(`
       SELECT o.order_id, o.user_id, u.username, o.total_price, o.pay_method, o.payment_status,
-             o.delivery_status, o.order_status, o.print_code, o.pickup_code, o.created_at, o.paid_at
+             o.order_get_type, o.delivery_status, o.pickup_status, o.print_code, o.pickup_code, o.created_at, o.paid_at
       FROM orders o
       LEFT JOIN users u ON u.user_id = o.user_id
       ORDER BY o.created_at DESC
@@ -2099,7 +2114,7 @@ async function handlePgAdminModels() {
           { name: "status", label: "Status", type: "select", options: [{ value: "active", label: "active" }, { value: "inactive", label: "inactive" }] },
         ],
       }),
-      orders: adminModel("Orders", "order_id", orders, { editable: false }),
+      orders: adminModel("Orders", "order_id", orders, { editable: false, columns:["order_id","username","total_price","payment_status","order_get_type","delivery_status","pickup_status","created_at"] }),
       "user-actions": adminModel("User Actions", "action_id", userActions, { editable: false }),
       "device-info": adminModel("Device Info", "id", deviceInfo, {
         columns: ["id", "equip_id", "type", "address", "status", "updated_at"],
