@@ -1166,7 +1166,7 @@
                     <option value="配件">配件</option>
                   </select>
                 </label>
-                <label>Unit price<input name="unit_price" type="number" step="0.01" value="0" /></label>
+                <label>Unit price<input name="unit_price" type="number" step="0.01" min="0.01" value="0.01" /></label>
                 <label>Nail shape<select name="nail_shape" data-product-taxonomy="shapes"></select></label>
                 <div class="wide size-stock-grid">
                   <label>Stock S<input name="stock_s" type="number" min="0" value="0" /></label>
@@ -1811,7 +1811,7 @@
                 <p class="eyebrow">Data View</p>
                 <h3>${model.title || view}</h3>
               </div>
-              ${model.editable ? `<button class="create-btn" type="button" data-admin-create="${view}">创建</button>` : ""}
+              ${model.editable && view !== "community" ? `<button class="create-btn" type="button" data-admin-create="${view}">创建</button>` : ""}
             </div>
             <div class="admin-filter-bar ${view === "product" ? "product-filter-bar" : ""}">
               <label>Search<input type="search" data-admin-search="${view}" placeholder="Search by ID, name, status" /></label>
@@ -2093,7 +2093,8 @@
       }
 
       function showAdminCreate(view) {
-        if (["official", "community"].includes(view)) { window.openTemplateEditor(view); return; }
+        if (view === "community") return;
+        if (view === "official") { window.openTemplateEditor(view); return; }
         if (view === "product") {
           openProductCreateModal();
           return;
@@ -2107,7 +2108,7 @@
 
       function renderModelCreateForm(view) {
         const model = adminModelState[view];
-        const saveableViews = ["event", "task", "promo-assets", "promotion", "community", "device-info"];
+        const saveableViews = ["event", "task", "promo-assets", "promotion", "device-info"];
         if (!saveableViews.includes(view)) return;
         if (!model?.editable) return;
         clearCreateModalBody();
@@ -2136,7 +2137,7 @@
           if (field.type === "file") {
             return `<label${fieldAttrs}>${label}<input name="${name}" type="file" accept="image/*" /></label>`;
           }
-          return `<label${fieldAttrs}>${label}<input name="${name}" type="${escapeHtml(field.type || "text")}" /></label>`;
+          return `<label${fieldAttrs}>${label}<input name="${name}" type="${escapeHtml(field.type || "text")}" ${field.type === "number" ? 'step="0.01"' : ""} /></label>`;
         }).join("");
         panel.innerHTML = `
           <h4>${escapeHtml(model.title || "Create record")}</h4>
@@ -2366,7 +2367,7 @@
         if (field.type === "file") {
           return `<label class="wide"${fieldAttrs}>${label}${renderCurrentImageInfo(row)}<input name="${name}" type="file" accept="image/*" /></label>`;
         }
-        return `<label${fieldAttrs}>${label}<input name="${name}" type="${escapeHtml(field.type || "text")}" value="${escapeHtml(value)}" /></label>`;
+        return `<label${fieldAttrs}>${label}<input name="${name}" type="${escapeHtml(field.type || "text")}" ${field.type === "number" ? 'step="0.01"' : ""} value="${escapeHtml(value)}" /></label>`;
       }
 
       function openAdminEditModal(view, rowId, itemKind = "") {
@@ -2952,8 +2953,8 @@
         }
       });
     </script>
-    <script src="assets/js/admin-order-codes.js"></script>
-  <script src="assets/js/admin-template-editor.js"></script>
+    <script src="assets/js/admin-order-codes.js?v=20260909"></script>
+  <script src="assets/js/admin-template-editor.js?v=20260909"></script>
   </body>
 </html>
 

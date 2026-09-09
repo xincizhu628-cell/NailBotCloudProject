@@ -227,7 +227,7 @@
     <script>
       const SESSION_KEY = "nailStudioUserAuthSessionV1";
       const GUEST_KEY = "nailStudioUserSession";
-      const state = { promos: [], user: { username: "Guest" }, total: 0 };
+      const state = { promos: [], user: { username: "" }, total: 0 };
 
       function promoSummary(promo) {
         try {
@@ -245,7 +245,7 @@
         const grid = document.querySelector("#coupon-grid");
         const filter = document.querySelector("#promo-type-filter").value;
         const promos = state.promos.filter((promo) => !filter || promo.promo_type === filter);
-        document.querySelector("#wallet-title").textContent = `用户${state.user.username || "Guest"}，您有${state.total ?? promos.length}个优惠未使用`;
+        document.querySelector("#wallet-title").textContent = `用户${state.user.username || ""}，您有${state.total ?? promos.length}个优惠未使用`;
         grid.innerHTML = promos.map((promo) => `
           <article class="coupon-card">
             <div>
@@ -267,11 +267,11 @@
         const response = await fetch("/api/user/promos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, userId: guest.userId }),
+          body: JSON.stringify({ sessionId }),
         });
         const payload = await response.json();
         if (!response.ok || !payload.ok) throw new Error(payload.error || "Failed to load coupons.");
-        state.promos = payload.promos || [];
+        state.promos = (payload.promos || []).map(p=>({...p,promo_type:({money_off:"满减优惠",percent_off:"折扣优惠",buy_x_get_y:"买送优惠",free_product:"免费商品"})[p.promo_type]||p.promo_type}));
         state.user = payload.user || state.user;
         state.total = payload.total ?? state.promos.length;
         renderWallet();

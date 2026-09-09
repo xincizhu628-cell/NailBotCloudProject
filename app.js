@@ -7782,7 +7782,7 @@ document.addEventListener("click", async (event) => {
 
   const libraryAsset = event.target.closest("[data-library-asset]");
   if (libraryAsset) {
-    const template=(publicCatalog?.templates || []).find(item=>String(item.template_id)===libraryAsset.dataset.libraryAsset && item.template_type==='asset');
+    const template=(publicCatalog?.templates || []).find(item=>String(item.template_id)===libraryAsset.dataset.libraryAsset && ['asset','nail-asset'].includes(item.template_type));
     const image=templateImageSource(template)||template?.image_url;
     if(image) importAssetToCanvas(template.template_name || 'template', image);
   }
@@ -9129,7 +9129,7 @@ async function refreshCartPricing(){
 function renderGalleryAssets() {
  const list=document.getElementById('gallery-asset-list');if(!list)return;
  list.replaceChildren();
- const templates=(publicCatalog?.templates || []).filter(item=>item.template_type==='asset');
+ const templates=(publicCatalog?.templates || []).filter(item=>['asset','nail-asset'].includes(item.template_type));
  if(!templates.length){const text=document.createElement('p');text.textContent=publicCatalogLoaded?(lang==='zh'?'暂无可用素材模板':'No asset templates available'):(lang==='zh'?'正在加载素材…':'Loading assets…');list.append(text);return;}
  for(const item of templates){const button=document.createElement('button');button.type='button';button.dataset.libraryAsset=String(item.template_id);const source=templateImageSource(item)||item.image_url;
  const image=document.createElement('img');image.className='asset-thumb';image.alt='';image.loading='lazy';image.style.objectFit='contain';if(source)image.src=source;else button.disabled=true;

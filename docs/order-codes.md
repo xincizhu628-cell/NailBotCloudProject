@@ -6,8 +6,8 @@
 
 1. 在项目 `.env` 配置 DATABASE_URL（不要提交 Git），执行 `npm run inspect:schema`。读取 work/supabase-schema.json，比对线上表、列、约束、索引、RLS、触发器后再迁移。脚本只导出元数据。
 2. 执行 `npm run migrate:order-codes`。事务内执行 database/migrations/20260907_order_codes.sql，可重复执行，不重新导入整个数据库。
-3. 设置独立高强度 ADMIN_CODE_API_TOKEN、MANUFACTURER_CODES_API_TOKEN。现有项目后台登录被注释，新接口独立鉴权；令牌仅留在页面内存，不写 localStorage。
-4. 启动服务。后台「打印码」「取货码」输入管理令牌，刷新、输入订单 ID 生成、分页、删除。订单创建自动调用两类生成服务，无需手工点按钮。
+3. 设置独立高强度 MANUFACTURER_CODES_API_TOKEN。后台操作统一使用管理员登录会话，不再使用 ADMIN_CODE_API_TOKEN。
+4. 启动服务。后台「打印码」「取货码」登录后台后自动加载，也可刷新、输入订单 ID 生成、分页、删除。订单创建自动调用两类生成服务，无需手工点按钮。
 5. 厂家提供地址后配置 MANUFACTURER_CONFIRM_API_URL（绝对 HTTPS URL）和 MANUFACTURER_API_TOKEN。默认 api/confirm 是占位，不发送网络请求。轮询默认 5 秒、10 秒超时、最多 60 秒退避，不重叠请求；多进程通过事务级 advisory lock 协调。
 
 ## 数据设计
@@ -63,7 +63,7 @@ Square 支付成功 -> 事务内锁定支付 ID -> 已有订单直接返回 -> �
 
 ## 管理接口
 
-`/api/admin/order-codes` 使用 `Authorization: Bearer <ADMIN_CODE_API_TOKEN>`。
+`/api/admin/order-codes` 使用后台登录的 HttpOnly Cookie；未登录或会话过期返回 401。浏览、生成和删除均无需额外令牌。
 
 - GET：与厂家接口相同分页参数。
 - POST：`{"type":"print","order_id":"..."}`，补齐该订单打印码；type=pickup 获取或生成唯一取货码。返回 printCodes、pickupCode 对象。
@@ -76,3 +76,37 @@ Square 支付成功 -> 事务内锁定支付 ID -> 已有订单直接返回 -> �
 PGlite 单连接测试不能代替真实 Supabase 多连接并发测试。上线前还需云端 schema 核对、迁移、真实并发验证及厂家协议联调。
 
 参考：PostgreSQL INSERT / ON CONFLICT https://www.postgresql.org/docs/current/sql-insert.html；Supabase RLS https://supabase.com/docs/guides/database/postgres/row-level-security 。
+
+
+## 管理员独立生成（2026-09-07 更新）
+
+两张码表的 order_id 现在允许 NULL，外键与取货码的订单唯一约束保留。多个未绑定码可同时存在，已绑定订单仍只有一个取货码。
+
+管理页在按订单生成表单下方提供「生成未绑定打印码 / 取货码」按钮，不需要填写订单 ID；每次点击生成一个新码，显示生成结果，列表的订单栏显示「未绑定」。原有订单表单仍必须填写有效订单 ID，避免输入遗漏导致误生成。
+
+独立生成接口：POST /api/admin/order-codes，请求体 {"type":"print","unbound":true} 或 {"type":"pickup","unbound":true}。返回 {"ok":true,"record":{完整记录}}，记录中 order_id 为 null。独立打印码的商品行、商品编号和件序号也为空。沿用后台登录会话鉴权和全局六位码查重。
+
+厂家对未绑定码的确认必须明确传入 "order_id":null；省略此字段仍视为无效消息。状态更新使用 NULL 安全匹配，版本防回退逻辑继续生效。本次仅增加未绑定生成，暂未增加后续绑定订单的操作。
+
+增量迁移：database/migrations/20260907_unbound_order_codes.sql。npm run migrate:order-codes 会顺序执行基础迁移和此迁移。
+
+
+## 后台统一登录（2026-09-07 更新）
+
+已恢复此前被注释的后台登录、退出、会话验证和后台路由保护。PostgreSQL 模式使用现有 admin_users/admin_sessions 表，密码算法兼容原 Python 管理员密码（PBKDF2-SHA256，180000 次、Base64 盐和哈希）。不会更改现有管理员账号或密码。SQLite 模式保留原认证实现。
+
+打开 admin.html 必须先登录；所有码管理权限随有效后台会话提供。创建管理员页面和接口也要求已有管理员登录。会话有效期 8 小时，退出后删除数据库会话；停用账号立即失效。页面去掉独立令牌框，自动读取码记录；401 时转回登录页面。
+
+ADMIN_CODE_API_TOKEN 已不再被代码使用，可以从部署变量中删除。厂家仍用 MANUFACTURER_CODES_API_TOKEN 读取接口，用 MANUFACTURER_API_TOKEN 调用确认接口，两者不受本次改变影响。数据库无需迁移。
+
+
+## External read API
+
+GET https://nailbotau.com/api/manufacturer/codes?type=print&after_id=0&limit=100
+GET https://nailbotau.com/api/manufacturer/codes?type=pickup&after_id=0&limit=100
+
+Authorization: Bearer <MANUFACTURER_CODES_API_TOKEN>
+
+Responses contain ok, rows, next_after_id. Each type has its own cursor. Follow pages to exhaustion and retain the last non-empty cursor for new-code polling. This is ordinary HTTP polling, not SSE or WebSocket. Incremental IDs only discover new rows; to observe status changes, reread existing pages. Same-origin admin UI uses /api/admin/order-codes with the login cookie and no manual token. External servers can poll the manufacturer endpoint. Cross-origin browser clients have no configured CORS allowance; use their server as a proxy and keep the manufacturer token on that server.
+
+2026-09-09 read-only cloud audit: 1 print-code row, 1 pickup-code row; no orders with a populated legacy code missing a corresponding table record. Order and code creation occur in the same PostgreSQL transaction. This audit did not create or alter production orders.

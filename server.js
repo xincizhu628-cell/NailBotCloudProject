@@ -63,6 +63,16 @@ const server = http.createServer(async (req, res) => {
     url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
     res.errorContext = requestErrorContext(req, url);
     if (await codeRoutes(req, res, url)) return;
+    if (req.method === "GET" && url.pathname === "/api/template-image") {
+      if(!pgPool){sendJson(res,503,{error:'Database unavailable'});return;}
+      const assetId=url.searchParams.get('id');
+      const publicRow=(await pgPool.query(`SELECT a.mime_type,a.base64_data FROM assets a WHERE a.asset_id=$1 AND EXISTS(SELECT 1 FROM templates t WHERE t.status='active' AND t.visibility='public' AND (t.cover_asset_id=a.asset_id OR t.image_asset_id=a.asset_id OR position(to_json(a.asset_id)::text in COALESCE(t.image_asset_ids,''))>0))`,[assetId])).rows[0];
+      let row=publicRow;
+      if(!row && (await getAdminSession(req)).ok)row=(await pgPool.query('SELECT mime_type,base64_data FROM assets WHERE asset_id=$1',[assetId])).rows[0];
+      if(!row?.base64_data){sendJson(res,404,{error:'Image not found'});return;}
+      const buffer=Buffer.from(row.base64_data.replace(/^data:[^,]+,/,''),'base64');
+      res.writeHead(200,{'Content-Type':row.mime_type||'image/png','Cache-Control':'private, no-cache','X-Content-Type-Options':'nosniff'});res.end(buffer);return;
+    }
     if (req.method === "POST" && url.pathname === "/api/admin/login") {
       await handleAdminLogin(req, res);
       return;
@@ -837,7 +847,7 @@ async function handleAdminOfficialTemplate(req, res) {
   }
   try {
     if (hasPostgresRuntime()) {
-      const result = await savePgTemplateUpload(body, "official");
+      const result = await templateAdminService.save('official',null,{template_name:body.templateName,template_type:body.template_type||'nail-design',nail_shape:body.nailShape||null,material_type:body.materialType||null,description:body.description||null,images:images.length?images.map(x=>x.data||x.image):[body.image]});
       sendJson(res, result.ok === false ? 400 : 200, result);
       return;
     }
@@ -1399,13 +1409,9 @@ async function handlePgUserUpdateContact(body) {
 }
 
 async function handlePgUserPromos(body) {
-  let userId = String(body.userId || "").trim();
-  if (!userId && body.sessionId) {
-    const session = await getPgAuthSession(body.sessionId);
-    if (!session.ok) return session;
-    userId = session.user.userId;
-  }
-  if (!userId) return { ok: false, error: "User is required." };
+  const session = await getPgAuthSession(body.sessionId);
+  if (!session.ok) return session;
+  const userId = session.user.userId;
   const promos = await safePgRows(
     `
     SELECT
@@ -1426,7 +1432,8 @@ async function handlePgUserPromos(body) {
     `,
     [userId],
   );
-  return { ok: true, promos };
+  const available=promos.filter(p=>p.user_status==='unused' && p.status==='active' && (!p.expire_date || Date.parse(p.expire_date)>Date.now()));
+  return { ok: true, promos:available, user:session.user, total:available.length };
 }
 
 async function handlePgUserPrintRecords(body) {
@@ -2033,13 +2040,13 @@ async function handlePgAdminModels() {
         fields: [
           { name: "promo_id", label: "Promo ID", type: "text" },
           { name: "promo_title", label: "Title", type: "text" },
-          { name: "promo_type", label: "Type", type: "select", options: ["满减优惠", "折扣优惠", "买送优惠", "免费商品"].map((value) => ({ value, label: value })) },
-          { name: "min_spend", label: "Min spend", type: "number", promoTypes: ["满减优惠"] },
-          { name: "amount_off", label: "Amount off", type: "number", promoTypes: ["满减优惠"] },
-          { name: "discount_percent", label: "Discount percent", type: "number", promoTypes: ["折扣优惠"] },
-          { name: "buy_quantity", label: "Buy quantity", type: "number", promoTypes: ["买送优惠"] },
-          { name: "gift_quantity", label: "Gift quantity", type: "number", promoTypes: ["买送优惠"] },
-          { name: "free_product", label: "Free product", type: "text", promoTypes: ["免费商品"] },
+          { name: "promo_type", label: "Type", type: "select", options: Object.entries(PROMO_TYPES).map(([label,value])=>({value,label})) },
+          { name: "min_spend", label: "Min spend", type: "number", promoTypes: ["money_off"] },
+          { name: "amount_off", label: "Amount off", type: "number", promoTypes: ["money_off"] },
+          { name: "discount_percent", label: "Discount percent", type: "number", promoTypes: ["percent_off"] },
+          { name: "buy_quantity", label: "Buy quantity", type: "number", promoTypes: ["buy_x_get_y"] },
+          { name: "gift_quantity", label: "Gift quantity", type: "number", promoTypes: ["buy_x_get_y"] },
+          { name: "free_product", label: "Free product", type: "text", promoTypes: ["free_product"] },
           { name: "description", label: "Description", type: "textarea" },
           { name: "expire_date", label: "Expire date", type: "date" },
           { name: "status", label: "Status", type: "select", options: [{ value: "active", label: "active" }, { value: "inactive", label: "inactive" }] },
@@ -2353,6 +2360,8 @@ async function handlePgAdminImportProduct(body, itemType) {
   return { ok: true, imported: 1, itemType: "product", ids: [productId], models: await handlePgAdminModels() };
 }
 
+const PROMO_TYPES={"满减优惠":"money_off","折扣优惠":"percent_off","买送优惠":"buy_x_get_y","免费商品":"free_product"};
+function normalizePromoType(value) {const type=PROMO_TYPES[value]||value||'percent_off';if(!Object.values(PROMO_TYPES).includes(type))throw new Error('请选择有效优惠类型');return type;}
 function pgPromotionContent(item) {
   if (item.promo_content) return String(item.promo_content);
   const content = {};
@@ -2390,6 +2399,7 @@ async function savePromotionEvent(item,id) {
 }
 
 async function handlePgAdminCreateRecord(body) {
+  if(body.module === "community") throw new Error("后台不能创建社区模板");
   if(body.module === "event") return savePromotionEvent(body.item || {});
   const moduleName = String(body.module || "").trim();
   const item = body.item || {};
@@ -2418,7 +2428,7 @@ async function handlePgAdminCreateRecord(body) {
       [
         promoId,
         cleanPgText(item.promo_title || item.title, promoId),
-        cleanPgText(item.promo_type, "折扣优惠"),
+        normalizePromoType(item.promo_type),
         pgPromotionContent(item),
         cleanPgText(item.expire_date),
         cleanPgText(item.status, "active"),
@@ -2556,10 +2566,7 @@ async function handlePgAdminRecordMutation(body, action) {
   } else if (moduleName === "promo-assets") {
     await pgPool.query("UPDATE promotional_assets SET image_url=$1, image_base64=$2 WHERE promo_asset_id=$3", [cleanPgText(item.image_url), pgDataUrlOrBase64(item.image_base64), id]);
   } else if (moduleName === "official" || moduleName === "community") {
-    await pgPool.query(
-      "UPDATE templates SET template_name=COALESCE(NULLIF($1, ''), template_name), template_title=$2, description=$3, design_type=COALESCE(NULLIF($4, ''), design_type), nail_shape=$5, material_type=$6, status=COALESCE(NULLIF($7, ''), status), updated_at=CURRENT_TIMESTAMP WHERE template_id=$8",
-      [cleanPgText(item.template_name || item.name), cleanPgText(item.template_title || item.title), cleanPgText(item.description || item.info), cleanPgText(item.design_type), cleanPgText(item.nail_shape), cleanPgText(item.material_type), cleanPgText(item.status), id],
-    );
+    await templateAdminService.save(moduleName,id,item);
   } else if (moduleName === "device-info") {
     await pgPool.query("UPDATE device_info SET equip_id=COALESCE(NULLIF($1, ''), equip_id), type=COALESCE(NULLIF($2, ''), type), address=$3, status=COALESCE(NULLIF($4, ''), status), updated_at=CURRENT_TIMESTAMP WHERE id=$5", [cleanPgText(item.equip_id), cleanPgText(item.type), cleanPgText(item.address), cleanPgText(item.status), id]);
   } else {

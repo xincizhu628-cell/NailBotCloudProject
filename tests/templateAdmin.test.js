@@ -3,19 +3,23 @@ test('official/community create and edit round-trip metadata, images and galleri
  const db=new PGlite();try{await db.exec(fs.readFileSync('database/schema.postgres.sql','utf8'));
  await db.exec("INSERT INTO official_galleries(official_gallery_id,gallery_name) VALUES ('og','Official'); INSERT INTO community_galleries(community_gallery_id,gallery_name) VALUES ('cg','Community');");
  const pool={query:(...x)=>db.query(...x),connect:async()=>({query:(...x)=>db.query(...x),release(){}})};const service=createTemplateAdminService(pool);
- for(const type of ['official','community']){const gallery=type==='official'?'og':'cg';const created=await service.save(type,null,{template_name:'Test',description:'Initial',images:['https://example.com/image.png'],gallery_ids:[gallery],shape_categories:'round',style_categories:'pink',material_categories:'gel',topic_tags:'nails',template_object_json:'{"layers":[]}',visibility:'private',status:'inactive'});
+ for(const type of ['official','community']){const gallery=type==='official'?'og':'cg';const created=await service.save('official',null,{template_name:'Test',description:'Initial',images:['https://example.com/image.png'],gallery_ids:['og'],shape_categories:'round',style_categories:'pink',material_categories:'gel',topic_tags:'nails',template_object_json:'{"layers":[]}',visibility:'private',status:'inactive'});
+ if(type==='community'){await db.query("UPDATE templates SET source_type='community',author_display_name='Original Author' WHERE template_id=$1",[created.templateId]);await db.query("UPDATE gallery_templates SET gallery_type='community',gallery_id='cg' WHERE template_id=$1",[created.templateId]);}
  const detail=await service.detail(type,created.templateId);assert.equal(detail.record.visibility,'private');assert.equal(detail.record.images.length,1);assert.deepEqual(detail.record.gallery_ids,[gallery]);assert.equal(detail.record.style_categories,'pink');
  await db.query('UPDATE templates SET like_count=8 WHERE template_id=$1',[created.templateId]);
  await service.save(type,created.templateId,{template_name:'Updated',description:'Updated description',tags:'tag1,tag2',status:'active',visibility:'public',gallery_ids:[]});
  const updated=(await service.detail(type,created.templateId)).record;assert.equal(updated.template_name,'Updated');assert.equal(updated.description,'Updated description');assert.equal(updated.like_count,8);assert.equal(updated.images[0].asset_id,detail.record.images[0].asset_id);assert.deepEqual(updated.gallery_ids,[]);
- for(const key of ['template_type','design_type','status','visibility'])await assert.rejects(service.save(type,created.templateId,{[key]:''}),/required|Invalid/);
+ for(const key of ['template_type','design_type','status','visibility'])await assert.rejects(service.save(type,created.templateId,{[key]:''}),/required|Invalid|无效/);
+ await assert.rejects(service.save(type,created.templateId,{author_display_name:'Tampered'}),/不可修改/);
  await assert.rejects(service.detail(type==='official'?'community':'official',created.templateId),/not found/);
  await assert.rejects(service.save(type,created.templateId,{template_name:'Bad',template_object_json:'{bad'}),/JSON/);
  await assert.rejects(service.save(type,created.templateId,{images:['https://example.com/new.png'],gallery_ids:['wrong-gallery']}),/Gallery/);
  assert.equal((await db.query('SELECT count(*)::int AS n FROM assets')).rows[0].n,type==='official'?1:2);
  assert.equal((await service.detail(type,created.templateId)).record.template_name,'Updated');
  }
+ await assert.rejects(service.save('community',null,{template_name:'Forbidden'}),/后台/);
  await assert.rejects(service.save('official',null,{template_name:'No image'}),/image/);
+ const uploaded=await service.save('official',null,{template_name:'Uploaded',template_type:'nail-asset',images:['data:image/png;base64,iVBORw0KGgo=']});const uploadDetail=await service.detail('official',uploaded.templateId);assert.match(uploadDetail.record.images[0].url,/^\/api\/template-image\?id=/);assert.equal(uploadDetail.record.template_type,'nail-asset');
  await assert.rejects(service.save('official',null,{template_name:'Too many',images:Array(7).fill('https://example.com/a.png')}),/six/);
  }finally{await db.close();}
 });
