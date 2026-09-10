@@ -51,7 +51,7 @@ button {
   padding: 0 clamp(18px, 3vw, 42px);
   border-right: 0;
   border-bottom: 0;
-  background: #ffe6f2;
+  background: var(--navigation-pink, #ffe6f2);
   backdrop-filter: none;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -844,7 +844,7 @@ body[data-active-view="home"] .sidebar {
   min-height: 64px;
   padding: 0 clamp(18px, 3vw, 42px);
   border-bottom: 0;
-  background: #ffe6f2;
+  background: var(--navigation-pink, #ffe6f2);
   backdrop-filter: none;
   grid-template-columns: minmax(0, 1fr) auto;
 }

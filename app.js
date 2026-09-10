@@ -578,7 +578,7 @@
   },
 };
 
-let lang = "en";
+let lang = window.CustomerI18n?.language || "en";
 let points = 8420;
 let activeSource = "all";
 let personalMode = "favorites";
@@ -1032,7 +1032,7 @@ function translatePage() {
   $$("[data-i18n-placeholder]").forEach((node) => {
     node.placeholder = t(node.dataset.i18nPlaceholder);
   });
-  $("#lang-toggle").textContent = lang === "en" ? "中文" : "EN";
+  $$("[data-language-toggle]").forEach(button=>button.textContent = lang === "en" ? "中文" : "EN");
   $("#page-title").textContent = t($(".view.active").dataset.titleKey);
   document.body.dataset.activeView = $(".view.active")?.id?.replace("-view", "") || "home";
   renderAuthWidget(currentAuthUser);
@@ -7990,13 +7990,10 @@ $("#layer-list")?.addEventListener("dragend", () => {
   $$("#layer-list .layer-row").forEach((item) => item.classList.remove("dragging", "drag-over"));
 });
 
-$("#lang-toggle").addEventListener("click", () => {
-  lang = lang === "en" ? "zh" : "en";
-  document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+window.addEventListener("customer-language-change", () => {
+  lang = window.CustomerI18n.language;
   translatePage();
-  renderProductFilters();
-  renderProducts();
-  renderCart();
+  renderProductFilters();renderProducts();renderCart();
 });
 
 $("#post-sort").addEventListener("click", (event) => {
@@ -9121,10 +9118,10 @@ async function refreshCartPricing(){
  const version=cartPricingRequest=(cartPricingRequest||0)+1;const items=checkoutSnapshot().items;if(!items.length)return;
  $('#cart-discount').textContent='…';$('#cart-total').textContent='…';
  try{const r=await fetch('/api/checkout-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items,sessionId:localStorage.getItem("nailStudioUserAuthSessionV1")||"",couponSelection:window.CouponPicker?.selected()})});const q=await r.json();if(!r.ok||!q.ok)throw Error(q.error);if(version!==cartPricingRequest)return;
- const gifts=document.querySelector('#coupon-cart-gifts');if(gifts){gifts.replaceChildren();for(const item of q.items.filter(i=>i.couponGift)){const line=document.createElement('p');line.textContent=item.name+' × '+item.qty+' · $0.00（优惠券赠品）';gifts.append(line);}}
+ const gifts=document.querySelector('#coupon-cart-gifts');if(gifts){gifts.replaceChildren();for(const item of q.items.filter(i=>i.couponGift)){const line=document.createElement('p');line.textContent=item.name+' × '+item.qty+(lang==='zh'?' · $0.00（优惠券赠品）':' · $0.00 (coupon gift)');gifts.append(line);}}
  $('#cart-subtotal').textContent=money(q.subtotal);$('#cart-discount').textContent=`-${money(q.discount)}`;$('#cart-total').textContent=money(q.total);
  document.querySelectorAll('.cart-line-side b').forEach((el,i)=>{if(q.items[i])el.textContent=money(q.items[i].lineTotal);});
- }catch(e){if(version===cartPricingRequest){$('#cart-total').textContent='计价失败，请重试';$('#cart-discount').textContent='—';}}
+ }catch(e){if(version===cartPricingRequest){$('#cart-total').textContent=(lang==='zh'?'计价失败，请重试':'Pricing failed. Please try again.');$('#cart-discount').textContent='—';}}
 }
 
 function renderGalleryAssets() {
