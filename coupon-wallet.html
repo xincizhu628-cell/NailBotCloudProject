@@ -224,68 +224,15 @@
       </section>
     </main>
 
+    <script src="assets/js/coupon-picker.js?v=20260910"></script>
     <script>
-      const SESSION_KEY = "nailStudioUserAuthSessionV1";
-      const GUEST_KEY = "nailStudioUserSession";
-      const state = { promos: [], user: { username: "" }, total: 0 };
-
-      function promoSummary(promo) {
-        try {
-          const content = JSON.parse(promo.promo_content || "{}");
-          if (content.summary) return content.summary;
-          if (promo.promo_type === "满减优惠") return `满 ${content.min_spend || 0} 减 ${content.amount_off || 0}`;
-          if (promo.promo_type === "折扣优惠") return `${content.discount_percent || 0}% OFF`;
-          if (promo.promo_type === "买送优惠") return `买 ${content.buy_quantity || 1} 送 ${content.gift_quantity || 1}`;
-          if (promo.promo_type === "免费商品") return `免费商品：${content.free_product || "指定商品"}`;
-        } catch {}
-        return promo.promo_type || "优惠";
+      let coupons=[];
+      const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      function render(){const labels={money_off:'满减优惠',percent_off:'折扣优惠',buy_x_get_y:'买送优惠',free_product:'免费商品'},filter=document.querySelector('#promo-type-filter').value;
+        document.querySelector('#coupon-grid').innerHTML=coupons.filter(c=>!filter||labels[c.deal_type]===filter).map(c=>`<article class="coupon-card"><strong>${esc(c.coupon_name)}</strong><p>${esc(CouponPicker.summary(c))}</p><p>${esc(CouponPicker.stateName[c.coupon_use_status])}</p><p>有效期：${esc(c.start_date||'不限')} 至 ${esc(c.expiry_date||'不限')}</p></article>`).join('')||'<p>暂无优惠券</p>';
       }
-
-      function renderWallet() {
-        const grid = document.querySelector("#coupon-grid");
-        const filter = document.querySelector("#promo-type-filter").value;
-        const promos = state.promos.filter((promo) => !filter || promo.promo_type === filter);
-        document.querySelector("#wallet-title").textContent = `用户${state.user.username || ""}，您有${state.total ?? promos.length}个优惠未使用`;
-        grid.innerHTML = promos.map((promo) => `
-          <article class="coupon-card">
-            <div>
-              <span class="tag">${promo.promo_type || "优惠"}</span>
-              <p class="discount">${promoSummary(promo)}</p>
-              <strong>${promo.promo_title || promo.promo_id}</strong>
-            </div>
-            <p class="date">有效期：${promo.expire_date || "未设置"}</p>
-          </article>
-        `).join("") || `<div class="empty">暂无符合该类型的优惠。</div>`;
-      }
-
-      async function loadWallet() {
-        const sessionId = localStorage.getItem(SESSION_KEY) || "";
-        let guest = {};
-        try {
-          guest = JSON.parse(localStorage.getItem(GUEST_KEY) || "{}");
-        } catch {}
-        const response = await fetch("/api/user/promos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId }),
-        });
-        const payload = await response.json();
-        if (!response.ok || !payload.ok) throw new Error(payload.error || "Failed to load coupons.");
-        state.promos = (payload.promos || []).map(p=>({...p,promo_type:({money_off:"满减优惠",percent_off:"折扣优惠",buy_x_get_y:"买送优惠",free_product:"免费商品"})[p.promo_type]||p.promo_type}));
-        state.user = payload.user || state.user;
-        state.total = payload.total ?? state.promos.length;
-        renderWallet();
-      }
-
-      document.querySelector("#back-btn").addEventListener("click", () => {
-        if (history.length > 1) history.back();
-        else location.href = "index.html";
-      });
-      document.querySelector("#promo-type-filter").addEventListener("change", renderWallet);
-      loadWallet().catch((error) => {
-        document.querySelector("#wallet-title").textContent = "优惠券包暂时无法读取";
-        document.querySelector("#coupon-grid").innerHTML = `<div class="empty">${error.message || "Load failed."}</div>`;
-      });
+      async function load(){try{const token=new URLSearchParams(location.search).get('claim');const data=await CouponPicker.wallet(token);coupons=data.coupons;document.querySelector('#wallet-title').textContent=`用户 ${data.user.username}，您还有 ${coupons.filter(c=>c.coupon_use_status==='unused').length} 个优惠未使用`;if(token)history.replaceState(null,'','coupon-wallet.html');render();}catch(e){document.querySelector('#wallet-title').textContent=e.message;}}
+      document.querySelector('#promo-type-filter').onchange=render;document.querySelector('#back-btn').onclick=()=>location.href='index.html';void load();
     </script>
   </body>
 </html>

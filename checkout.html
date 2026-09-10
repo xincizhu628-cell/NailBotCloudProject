@@ -336,7 +336,7 @@
             This page is wired for a real Square test flow. If Square keys are not configured yet, it falls back to a safe local demo so we can still test the full page experience.
           </p>
           <div id="mode-badge" class="badge">Loading payment mode...</div>
-          <div id="order-list" class="order-list"></div>
+          <div id="order-list" class="order-list"></div><button type="button" data-coupon-picker>添加优惠券</button>
           <div class="totals">
             <div class="totals-row"><span>Subtotal</span><strong id="subtotal">$0.00</strong></div>
             <div class="totals-row"><span>Discount</span><strong id="discount">-$0.00</strong></div>
@@ -409,6 +409,7 @@
       </section>
     </main>
 
+    <script src="assets/js/coupon-picker.js?v=20260910"></script>
     <script>
       const CHECKOUT_DRAFT_KEY = "nailStudioCheckoutDraftV1";
       const PRODUCT_CART_KEY = "nailStudioProductCartV1";
@@ -638,26 +639,29 @@
 
         try {
           const oldKey=state.draft.pricingKey;
-          await refreshQuote();
+          if(sessionStorage.getItem('couponPaymentPending')!=='1')await refreshQuote();
           if(oldKey!==state.draft.pricingKey)throw Error('Prices changed. Review the updated total and pay again.');
-          const sourceId = state.config?.enabled ? await tokenizeCard() : "";
+          const sourceId = state.config?.enabled && state.draft.total>0 && sessionStorage.getItem('couponPaymentPending')!=='1' ? await tokenizeCard() : "";
           const buyer = collectBuyer();
+          if(state.draft.coupon){sessionStorage.setItem('couponPaymentPending','1');localStorage.setItem(CHECKOUT_DRAFT_KEY,JSON.stringify(state.draft));}
           const payload = await loadJson("/api/square-payment", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               sourceId,
               sessionId: localStorage.getItem("nailStudioUserAuthSessionV1") || "",
+              couponSelection: state.draft.coupon?.selectionId || null,
               amount: state.draft.total,
               pricingKey: state.draft.pricingKey,
               currency: state.draft.currency || "AUD",
               buyer,
               note: buyer.orderNote || "AI Nail Studio checkout",
               items: state.draft.items,
-              idempotencyKey: `checkout_${Date.now()}`,
+              idempotencyKey: paymentAttemptKey(),
             }),
           });
 
+          sessionStorage.removeItem('couponPaymentPending');sessionStorage.removeItem('checkoutAttemptKey');window.CouponPicker?.clear();
           localStorage.removeItem(CHECKOUT_DRAFT_KEY);
           if (state.draft.mode !== "buy-now") localStorage.removeItem(PRODUCT_CART_KEY);
           setStatus(
@@ -668,22 +672,26 @@
           );
           button.textContent = "Payment completed";
         } catch (error) {
+          if(error.payload?.retrySameAttempt){sessionStorage.setItem('couponPaymentPending','1');localStorage.setItem(CHECKOUT_DRAFT_KEY,JSON.stringify(state.draft));}
+          else if(error.payload && error.status<500){sessionStorage.removeItem('couponPaymentPending');sessionStorage.removeItem('checkoutAttemptKey');}
           setStatus(error.message || "Payment failed.", "error");
           button.disabled = false;
           button.textContent = "Pay now";
         }
       }
 
+      function paymentAttemptKey(){let key=sessionStorage.getItem('checkoutAttemptKey');if(!key){key='checkout_'+crypto.randomUUID();sessionStorage.setItem('checkoutAttemptKey',key);}return key;}
+      window.addEventListener('coupon-selected',()=>{sessionStorage.removeItem('checkoutAttemptKey');refreshQuote().catch(e=>setStatus(e.message,'error'));});
       async function refreshQuote() {
         if(!state.draft?.items?.length)throw Error('Your basket is empty');
-        const q=await loadJson('/api/checkout-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:state.draft.items})});
-        Object.assign(state.draft,q);renderDraft();
+        const q=await loadJson('/api/checkout-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:state.draft.items,sessionId:localStorage.getItem("nailStudioUserAuthSessionV1")||"",couponSelection:window.CouponPicker?.selected()})});
+        delete state.draft.coupon;Object.assign(state.draft,q);localStorage.setItem(CHECKOUT_DRAFT_KEY,JSON.stringify(state.draft));renderDraft();
       }
       async function boot() {
         try {
           await Promise.all([loadConfig(), loadCatalog()]);
           loadDraft();
-          await refreshQuote();
+          if(sessionStorage.getItem('couponPaymentPending')!=='1')await refreshQuote();
           renderDraft();
           await loadSquareSdk();
         } catch (error) {

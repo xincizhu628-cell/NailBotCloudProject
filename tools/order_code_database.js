@@ -11,7 +11,10 @@ async function main() {
   const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false } });
   await client.connect();
   try {
-    if (process.argv.includes('--apply-manual')) {
+    if (process.argv.includes('--apply-coupons')) {
+      await client.query('BEGIN');
+      try {await client.query(fs.readFileSync(path.join(root,'database/migrations/20260910_coupons.sql'),'utf8'));await client.query('COMMIT');console.log('Coupon migration applied');}catch(error){await client.query('ROLLBACK');throw error;}
+    } else if (process.argv.includes('--apply-manual')) {
       await client.query('BEGIN');
       try {await client.query(fs.readFileSync(path.join(root,'database/migrations/20260910_manual_codes.sql'),'utf8'));await client.query('COMMIT');console.log('Manual code migration applied');}catch(error){await client.query('ROLLBACK');throw error;}
     } else if (process.argv.includes('--apply-fulfillment')) {

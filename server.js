@@ -17,6 +17,8 @@ const { createOrderCodeRoutes } = require("./services/orderCodeRoutes");
 
 const { createPromotionPricingService } = require('./services/promotionPricingService');
 const { createOrderManagementService, orderGetType } = require('./services/orderManagementService');
+const {createCouponService}=require('./services/couponService');
+const {createCouponCheckoutService}=require('./services/couponCheckoutService');
 const root = path.resolve(__dirname || process.cwd());
 loadEnvFile(path.join(root, ".env"));
 const bundledPython = path.join(os.homedir(), ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "python.exe");
@@ -29,6 +31,9 @@ const pgPool = databaseUrl ? new Pool({
   ssl: String(process.env.DATABASE_SSL || "true").toLowerCase() === "false" ? false : { rejectUnauthorized: false },
 }) : null;
 const promotionPricing = pgPool ? createPromotionPricingService(pgPool) : null;
+const couponService=pgPool?createCouponService(pgPool,promotionPricing):null;
+const couponCheckout=pgPool?createCouponCheckoutService({pool:pgPool,coupons:couponService,payment:squarePaymentService,createOrder:createPaidOrderRecord,getSession:getPgAuthSession}):null;
+if(couponService){const timer=setInterval(()=>couponService.refresh().catch(e=>console.error('Coupon status refresh failed:',e.message)),60000);timer.unref();}
 const orderManagement = pgPool ? createOrderManagementService(pgPool) : null;
 const orderCodes = pgPool ? createOrderCodeService(pgPool) : null;
 const templateAdminService = pgPool ? createTemplateAdminService(pgPool) : null;
@@ -88,6 +93,22 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (await rejectUnauthenticatedAdminRequest(req, res, url)) return;
+    if(url.pathname==='/api/admin/coupons'){
+      try{if(!couponService)throw Error('Database unavailable');let result;
+        if(req.method==='GET')result=await couponService.adminList();
+        else {const body=await readJson(req);if(req.method==='POST'&&body.action==='grant')result=await couponService.grant(body.id,body.userIds);
+          else if(req.method==='POST'&&body.action==='link')result=await couponService.claimLink(body.id);
+          else if(req.method==='POST'||req.method==='PATCH')result=await couponService.save(req.method==='PATCH'?body.id:null,body.item||{});
+          else {sendJson(res,405,{ok:false,error:'Method not allowed'});return;}}
+        sendJson(res,200,result,{'Cache-Control':'no-store'});
+      }catch(e){sendJson(res,400,{ok:false,error:e.message});}return;
+    }
+    if(url.pathname==='/api/user/coupons'&&req.method==='POST'){
+      try{const body=await readJson(req),session=await getPgAuthSession(body.sessionId);if(!session.ok){sendJson(res,401,session);return;}
+        if(body.action==='claim')await couponService.claim(body.token,session.user.userId);
+        sendJson(res,200,{...await couponService.wallet(session.user.userId),user:{username:session.user.username}},{'Cache-Control':'no-store'});
+      }catch(e){sendJson(res,400,{ok:false,error:e.message});}return;
+    }
     if (url.pathname === '/api/admin/order-detail') {
       if(!orderManagement){sendJson(res,503,{ok:false,error:'Database unavailable'});return;}
       try {
@@ -246,7 +267,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/checkout-quote") {
-      try { if (!promotionPricing) throw new Error("Product pricing database is unavailable"); const body=await readJson(req); sendJson(res,200,await promotionPricing.quote(body.items),{"Cache-Control":"no-store"}); }
+      try { if (!promotionPricing) throw new Error("Product pricing database is unavailable"); const body=await readJson(req);let userId=null;if(body.couponSelection){const session=await getPgAuthSession(body.sessionId);if(!session.ok)throw Error('请先登录');userId=session.user.userId;} sendJson(res,200,await couponService.quote(body.items,userId,body.couponSelection),{"Cache-Control":"no-store"}); }
       catch(error){sendJson(res,400,{ok:false,error:error.message});} return;
     }
     if (req.method === "POST" && url.pathname === "/api/square-payment") {
@@ -518,6 +539,7 @@ async function handleSquareConfig(req, res) {
 
 async function handleSquarePayment(req, res) {
   const body = await readJson(req);
+  if(body.couponSelection){try{const result=await couponCheckout.pay(body);sendJson(res,result.httpStatus,result.body);}catch(e){sendJson(res,400,{ok:false,error:e.message});}return;}
   if(body.sessionId) {
     try {const session=await getPgAuthSession(body.sessionId);if(!session.ok){sendJson(res,401,{ok:false,error:'登录状态已失效，请重新登录后下单'});return;}}
     catch(error){sendJson(res,503,{ok:false,error:'暂时无法验证登录，请稍后重试'});return;}
@@ -528,6 +550,7 @@ async function handleSquarePayment(req, res) {
   if(body.pricingKey!==quote.pricingKey || Math.round(Number(body.amount)*100)!==Math.round(quote.total*100)) {
     sendJson(res,409,{ok:false,error:"Prices or promotions changed. Review the refreshed total and pay again.",quote});return;
   }
+  delete body.reservedOrderId;delete body.couponUserId;delete body.couponRewardTemplates;
   body.amount=quote.total;body.items=quote.items;body.currency=squarePaymentService.browserConfig().currency;
   const result = await squarePaymentService.createPayment(body);
   if (result.body?.ok && result.httpStatus >= 200 && result.httpStatus < 300) {
@@ -627,7 +650,7 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
   const items = Array.isArray(body.items) ? body.items.filter((item) => item && item.id).slice(0, 50) : [];
   if (!items.length) return { ok: false, skipped: true, reason: "No checkout items were supplied." };
   const client = await pgPool.connect();
-  const orderId = `order_${crypto.randomUUID().replace(/-/g, "")}`;
+  const orderId = body.reservedOrderId || `order_${crypto.randomUUID().replace(/-/g, "")}`;
   let pickupCode = "000000";
   let printCode = null;
   let generatedCodes = { printCodes: [], pickupCode: null };
@@ -647,7 +670,7 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
         pickupCodeRecord: saved.pickupCode, containsPrintable: Boolean(saved.printCodes.length || existing.print_code),
         boundDeviceId: existing.bound_device_id, manufacturerSyncStatus: existing.manufacturer_sync_status };
     }
-    const userId = await resolveOrderUserId(client, body);
+    const userId = body.couponUserId || await resolveOrderUserId(client, body);
     const serviceRow = await ensurePrintServiceProduct(client, items);
     const productRows = (await client.query(
       `
@@ -665,6 +688,8 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
     boundDeviceId = cleanPgText(items.find((item) => item.pickupDeviceId)?.pickupDeviceId)
       || cleanPgText(items.find((item) => item.boundDeviceId)?.boundDeviceId)
       || cleanPgText(rows.find((product) => product.bound_device_id)?.bound_device_id);
+    if(body.reservedOrderId){const changed=await client.query("UPDATE orders SET total_price=$1,pay_method=$2,payment_status='paid',order_get_type=$3,paid_at=CURRENT_TIMESTAMP,bound_device_id=$4,payment_provider_id=$5,manufacturer_sync_status='pending' WHERE order_id=$6 AND user_id=$7 AND payment_status='pending' RETURNING order_id",[pgNumber(body.amount),Number(body.amount)===0?'coupon':'square',orderGetType(rows),boundDeviceId,paymentId,orderId,userId]);if(changed.rows.length!==1)throw Error('Reserved order is not available');}
+    else {
     await client.query(
       `
       INSERT INTO orders (
@@ -685,6 +710,7 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
         cleanPgText(payment.paymentId),
       ],
     );
+    }
     for (const item of items) {
       const product = products.get(String(item.id));
       if (!product) throw new Error(`Product not found: ${item.id}`);
@@ -700,12 +726,13 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
           orderId,
           String(item.id),
           quantity,
-          pgNumber(item.price || product.unit_price),
+          pgNumber(item.price ?? product.unit_price),
           cleanPgText(item.size),
           JSON.stringify({ ...item, product_name: product.product_name, pickup_method: product.pickup_method }),
         ],
       );
     }
+    if(body.couponSelection)await couponService.redeem(client,body.couponSelection,userId,orderId,body.couponRewardTemplates||[]);
     generatedCodes = await orderCodes.generateForOrder(client, orderId);
     pickupCode = generatedCodes.pickupCode.code;
     printCode = generatedCodes.printCodes[0]?.code || null;

@@ -7012,7 +7012,7 @@ function normalizePersonalTemplateOrder() {
 
 function persistPersonalDesigns() {
   normalizePersonalTemplateOrder();
-  const payload = () => JSON.stringify(designs.filter((design) => design.source === "personal"));
+  const payload = () => JSON.stringify(designs.filter((design) => design.source === "personal" && !design.couponReward));
   try {
     localStorage.setItem(PERSONAL_DESIGNS_KEY, payload());
     return true;
@@ -9120,7 +9120,8 @@ var cartPricingRequest;
 async function refreshCartPricing(){
  const version=cartPricingRequest=(cartPricingRequest||0)+1;const items=checkoutSnapshot().items;if(!items.length)return;
  $('#cart-discount').textContent='…';$('#cart-total').textContent='…';
- try{const r=await fetch('/api/checkout-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});const q=await r.json();if(!r.ok||!q.ok)throw Error(q.error);if(version!==cartPricingRequest)return;
+ try{const r=await fetch('/api/checkout-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items,sessionId:localStorage.getItem("nailStudioUserAuthSessionV1")||"",couponSelection:window.CouponPicker?.selected()})});const q=await r.json();if(!r.ok||!q.ok)throw Error(q.error);if(version!==cartPricingRequest)return;
+ const gifts=document.querySelector('#coupon-cart-gifts');if(gifts){gifts.replaceChildren();for(const item of q.items.filter(i=>i.couponGift)){const line=document.createElement('p');line.textContent=item.name+' × '+item.qty+' · $0.00（优惠券赠品）';gifts.append(line);}}
  $('#cart-subtotal').textContent=money(q.subtotal);$('#cart-discount').textContent=`-${money(q.discount)}`;$('#cart-total').textContent=money(q.total);
  document.querySelectorAll('.cart-line-side b').forEach((el,i)=>{if(q.items[i])el.textContent=money(q.items[i].lineTotal);});
  }catch(e){if(version===cartPricingRequest){$('#cart-total').textContent='计价失败，请重试';$('#cart-discount').textContent='—';}}
@@ -9135,3 +9136,16 @@ function renderGalleryAssets() {
  const image=document.createElement('img');image.className='asset-thumb';image.alt='';image.loading='lazy';image.style.objectFit='contain';if(source)image.src=source;else button.disabled=true;
  const name=document.createElement('strong');name.textContent=item.template_name||item.template_title||item.template_id;button.append(image,name);list.append(button);}
 }
+
+window.addEventListener('coupon-selected',()=>{void refreshCartPricing();});
+
+async function loadCouponTemplateFavorites(){
+ const session=localStorage.getItem('nailStudioUserAuthSessionV1')||'';
+ for(let i=designs.length-1;i>=0;i--)if(designs[i].couponReward)designs.splice(i,1);
+ if(!session||!window.CouponPicker)return;
+ try{const data=await CouponPicker.wallet();if(session!==(localStorage.getItem('nailStudioUserAuthSessionV1')||''))return;
+ for(const item of data.templates||[]){if(designs.some(d=>d.source==='personal'&&d.templateId===item.template_id))continue;designs.push({source:'personal',mode:'favorites',couponReward:true,name:item.template_name,zhName:item.template_name,templateId:item.template_id,id:item.template_id,designType:item.design_type,shapeKey:item.nail_shape||'long-oval',image:item.image_url,imageList:item.image_url?[item.image_url]:[],thumb:item.image_url?cssImage(item.image_url):'',tags:[],categoryIds:[],likes:0,comments:0,views:0});}renderPersonalDesigns();
+ }catch(e){console.warn('Unable to load coupon template collection:',e.message);}
+}
+document.addEventListener('click',e=>{if(e.target.closest('[data-tab="personal"],#personal-switch'))void loadCouponTemplateFavorites();});
+void loadCouponTemplateFavorites();
