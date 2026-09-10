@@ -647,6 +647,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               sourceId,
+              sessionId: localStorage.getItem("nailStudioUserAuthSessionV1") || "",
               amount: state.draft.total,
               pricingKey: state.draft.pricingKey,
               currency: state.draft.currency || "AUD",

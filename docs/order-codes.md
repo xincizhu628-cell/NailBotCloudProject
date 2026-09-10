@@ -110,3 +110,12 @@ Authorization: Bearer <MANUFACTURER_CODES_API_TOKEN>
 Responses contain ok, rows, next_after_id. Each type has its own cursor. Follow pages to exhaustion and retain the last non-empty cursor for new-code polling. This is ordinary HTTP polling, not SSE or WebSocket. Incremental IDs only discover new rows; to observe status changes, reread existing pages. Same-origin admin UI uses /api/admin/order-codes with the login cookie and no manual token. External servers can poll the manufacturer endpoint. Cross-origin browser clients have no configured CORS allowance; use their server as a proxy and keep the manufacturer token on that server.
 
 2026-09-09 read-only cloud audit: 1 print-code row, 1 pickup-code row; no orders with a populated legacy code missing a corresponding table record. Order and code creation occur in the same PostgreSQL transaction. This audit did not create or alter production orders.
+
+
+## Manual code entry (2026-09-10)
+
+Admin POST /api/admin/order-codes now accepts {type,code,order_id}. Supply a six-digit string, preserving leading zeroes. order_id is optional. Records are marked code_origin=manual, sync_status=success, use_status=inactive. System order generation remains internal and unchanged; the admin API no longer exposes generation actions.
+
+Admin PATCH accepts {type:"print",id,order_id} to rebind or unbind only manually entered print codes. Code number and statuses are preserved. Pickup codes and system-generated print codes cannot be edited. Existing one-pickup-code-per-order uniqueness is retained; a conflicting binding is rejected, never automatically replaced. The shared registry rejects duplicate/reused numbers across both tables.
+
+Migration 20260910_manual_codes.sql adds code_origin; existing rows default to system. Applied to configured Supabase on 2026-09-10. The first order claimed by Quanshan was corrected from its orphan guest checkout ID to the unique Quanshan member ID using an exact guarded update; the user-scoped order service then returned it. Checkout now sends the member session and rejects an invalid supplied session rather than silently assigning a guest identity.

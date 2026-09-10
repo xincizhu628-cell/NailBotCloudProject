@@ -518,6 +518,10 @@ async function handleSquareConfig(req, res) {
 
 async function handleSquarePayment(req, res) {
   const body = await readJson(req);
+  if(body.sessionId) {
+    try {const session=await getPgAuthSession(body.sessionId);if(!session.ok){sendJson(res,401,{ok:false,error:'登录状态已失效，请重新登录后下单'});return;}}
+    catch(error){sendJson(res,503,{ok:false,error:'暂时无法验证登录，请稍后重试'});return;}
+  }
   if (!promotionPricing) {sendJson(res,503,{ok:false,error:"Product pricing database is unavailable"});return;}
   let quote;
   try {quote=await promotionPricing.quote(body.items);}catch(error){sendJson(res,400,{ok:false,error:error.message});return;}
@@ -565,8 +569,9 @@ function itemLooksPrintable(item = {}, product = {}) {
 async function resolveOrderUserId(client, body = {}) {
   const sessionId = cleanPgText(body.sessionId);
   if (sessionId) {
-    const session = await getPgAuthSession(sessionId).catch(() => null);
-    if (session?.ok && session.user?.userId) return session.user.userId;
+    const session = await getPgAuthSession(sessionId);
+    if (!session?.ok || !session.user?.userId) throw new Error('登录状态已失效，请重新登录后下单');
+    return session.user.userId;
   }
   const guestId = `guest_checkout_${crypto.randomUUID().replace(/-/g, "")}`;
   await client.query(

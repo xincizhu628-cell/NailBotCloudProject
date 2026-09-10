@@ -28,15 +28,11 @@ function createOrderCodeRoutes({ codes, env, readJson, sendJson, getAdminSession
       } else if (admin && req.method === 'POST') {
         const body = await readJson(req);
         if (!['print','pickup'].includes(body.type)) throw new Error('Valid type is required');
-        if (body.unbound === true) {
-          if (body.order_id != null && body.order_id !== '') throw new Error('Unbound generation must not include an order ID');
-          const record = await codes.transaction(client => body.type === 'print'
-            ? codes.generatePrintCode(client) : codes.generatePickupCode(client));
-          data = { record };
-        } else {
-          if (typeof body.order_id !== 'string' || !body.order_id.trim()) throw new Error('Order ID is required for order generation');
-          data = await codes.transaction(client => codes.generateForOrder(client, body.order_id.trim(), body.type));
-        }
+        data = { record: await codes.addManual(body.type,body.code,body.order_id) };
+      } else if (admin && req.method === 'PATCH') {
+        const body = await readJson(req);
+        if(!Object.hasOwn(body,'order_id'))throw new Error('请提供订单编号，解绑时设为空');
+        data = { record: await codes.rebindManual(body.type,body.id,body.order_id) };
       } else if (admin && req.method === 'DELETE') {
         const body = await readJson(req);
         if (!/^\d+$/.test(String(body.id))) throw new Error('Invalid code id');
