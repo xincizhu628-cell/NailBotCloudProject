@@ -198,7 +198,7 @@
         }
       }
     </style>
-  </head>
+  <link rel="stylesheet" href="assets/css/shop-coupons.css?v=20260910b"></head>
   <body>
     <main class="page">
       <button class="back-btn" id="back-btn" type="button">← Back</button>
@@ -219,9 +219,9 @@
         </select>
       </div>
 
-      <section class="coupon-grid" id="coupon-grid">
+      <div class="wallet-columns"><section class="coupon-grid" id="coupon-grid">
         <div class="empty">Loading...</div>
-      </section>
+      </section><aside class="coupon-gain"><h2>How to gain coupons?</h2><a href="index.html?view=products&amp;shop=coupons">Go to Shop / 去商城</a><a href="https://www.tiktok.com/" target="_blank" rel="noopener noreferrer">Go to Tiktok</a><a href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer">Go to Instagram</a><h3>Join Latest Activities</h3><div id="coupon-activities" aria-live="polite">Loading...</div></aside></div>
     </main>
 
     <script src="assets/js/coupon-picker.js?v=20260910"></script>
@@ -234,5 +234,5 @@
       async function load(){try{const token=new URLSearchParams(location.search).get('claim');const data=await CouponPicker.wallet(token);coupons=data.coupons;document.querySelector('#wallet-title').textContent=`用户 ${data.user.username}，您还有 ${coupons.filter(c=>c.coupon_use_status==='unused').length} 个优惠未使用`;if(token)history.replaceState(null,'','coupon-wallet.html');render();}catch(e){document.querySelector('#wallet-title').textContent=e.message;}}
       document.querySelector('#promo-type-filter').onchange=render;document.querySelector('#back-btn').onclick=()=>location.href='index.html';void load();
     </script>
-  </body>
+  <script src="assets/js/shop-coupons.js?v=20260910b"></script></body>
 </html>

@@ -35,3 +35,10 @@ test('zero-total coupon checkout bypasses charging and definitive failure releas
  const second=await coupons.save(null,base);await coupons.grant(second.id,['u']);const sid=(await coupons.wallet('u')).coupons.find(c=>c.coupon_use_status==='unused').selection_id;quote=await coupons.quote(items,'u',sid);
  const declined=await service.pay({items,couponSelection:sid,pricingKey:quote.pricingKey,amount:quote.total,idempotencyKey:'checkout_decline',sourceId:'token'});assert.equal(declined.body.retrySameAttempt,false);const row=(await db.query('SELECT * FROM user_coupons WHERE user_coupon_id=$1',[sid])).rows[0];assert.equal(row.order_id,null);assert.equal(row.checkout_id,null);assert.equal(row.coupon_use_status,'unused');assert.equal(calls,1);
  }finally{await db.close();}});
+
+test('shop shows published shop coupons and external activities; product lookup checks exact database identities',async()=>{const {db,coupons}=await fixture();try{
+ await coupons.save(null,{...base,coupon_name:'Shop'});await coupons.save(null,{...base,coupon_name:'Hidden',status:'unpublished'});await coupons.save(null,{...base,coupon_name:'Task',coupon_scene_type:['任务奖励']});
+ await db.query("INSERT INTO events(event_id,event_name,event_title,event_type,status) VALUES(2,'social','Social Title','external_social','active'),(3,'hidden','Hidden Title','external_social','inactive')");
+ const shop=await coupons.storefront();assert.deepEqual(shop.coupons.map(c=>c.coupon_name),['Shop']);assert.equal(shop.coupons[0].coupon_id,undefined);assert.deepEqual(shop.activities.map(a=>a.title),['Social Title']);
+ assert.equal((await coupons.findProducts('a')).products[0].value,'a');assert.equal((await coupons.findProducts('A')).products[0].value,'a');assert.equal((await coupons.findProducts('missing')).products.length,0);await assert.rejects(coupons.findProducts(''),/请输入/);
+ }finally{await db.close();}});

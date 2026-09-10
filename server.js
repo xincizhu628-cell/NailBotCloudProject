@@ -93,9 +93,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (await rejectUnauthenticatedAdminRequest(req, res, url)) return;
+    if(req.method==='GET'&&url.pathname==='/api/shop/coupons'){
+      try{if(!couponService)throw Error('Database unavailable');sendJson(res,200,await couponService.storefront(),{'Cache-Control':'no-store'});}catch(e){sendJson(res,503,{ok:false,error:'暂时无法读取优惠券'});}return;
+    }
     if(url.pathname==='/api/admin/coupons'){
       try{if(!couponService)throw Error('Database unavailable');let result;
-        if(req.method==='GET')result=await couponService.adminList();
+        if(req.method==='GET')result=url.searchParams.has('product')?await couponService.findProducts(url.searchParams.get('product')):await couponService.adminList();
         else {const body=await readJson(req);if(req.method==='POST'&&body.action==='grant')result=await couponService.grant(body.id,body.userIds);
           else if(req.method==='POST'&&body.action==='link')result=await couponService.claimLink(body.id);
           else if(req.method==='POST'||req.method==='PATCH')result=await couponService.save(req.method==='PATCH'?body.id:null,body.item||{});

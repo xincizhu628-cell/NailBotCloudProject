@@ -8,6 +8,8 @@ function createCouponService(pool,pricing){
  async function transaction(fn){const c=await pool.connect();try{await c.query('BEGIN');const r=await fn(c);await c.query('COMMIT');return r;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
  async function refresh(c=pool){await c.query(`UPDATE user_coupons u SET coupon_use_status=CASE WHEN c.expiry_date IS NOT NULL AND c.expiry_date<>'' AND c.expiry_date::timestamptz<=now() THEN 'expired' WHEN c.start_date>now() THEN 'inactive' ELSE 'unused' END FROM coupons c WHERE c.coupon_id=u.coupon_id AND u.coupon_use_status<>'used' AND u.coupon_use_status IS DISTINCT FROM CASE WHEN c.expiry_date IS NOT NULL AND c.expiry_date<>'' AND c.expiry_date::timestamptz<=now() THEN 'expired' WHEN c.start_date>now() THEN 'inactive' ELSE 'unused' END`);}
  async function options(){const [products,templates,users]=await Promise.all([pool.query("SELECT product_id AS value,product_name AS label FROM products WHERE status='active' ORDER BY product_name"),pool.query("SELECT template_id AS value,template_name AS label FROM templates WHERE status='active' ORDER BY template_name"),pool.query('SELECT user_id AS value,username AS label FROM users ORDER BY username')]);return {products:products.rows,templates:templates.rows,users:users.rows};}
+ async function findProducts(query){const value=String(query||'').trim();if(!value)throw Error('请输入商品名称或编号');return {ok:true,products:(await pool.query('SELECT product_id AS value,product_name AS label FROM products WHERE product_id=$1 OR product_name=$1 ORDER BY product_id',[value])).rows};}
+ async function storefront(){return {ok:true,coupons:(await pool.query("SELECT coupon_name,deal_type,condition_amount,reduce_amount,discount,start_date,expiry_date,coupon_url FROM coupons WHERE status='published' AND coupon_scene_type @> '[\"商城\"]'::jsonb ORDER BY created_at DESC")).rows,activities:(await pool.query("SELECT event_title AS title,event_name,html_url FROM events WHERE event_type='external_social' AND status='active' ORDER BY sort_order,created_at DESC")).rows};}
  async function adminList(){await refresh();return {ok:true,rows:(await pool.query('SELECT * FROM coupons ORDER BY created_at DESC')).rows,assignments:(await pool.query('SELECT u.*,p.username FROM user_coupons u JOIN users p ON p.user_id=u.user_id ORDER BY u.created_at DESC')).rows,options:await options()};}
  async function save(id,input){return transaction(async c=>{
  const old=id?(await c.query('SELECT * FROM coupons WHERE coupon_id=$1 FOR UPDATE',[id])).rows[0]:null;if(id&&!old)throw Error('优惠券不存在');const v={...old,...input};
@@ -48,6 +50,6 @@ function createCouponService(pool,pricing){
  if(!gallery){gallery='pg_'+crypto.randomUUID();await client.query("INSERT INTO personal_galleries(personal_gallery_id,user_id,gallery_name) VALUES($1,$2,'优惠券收藏')",[gallery,userId]);}
  await client.query("INSERT INTO gallery_templates(gallery_template_id,gallery_type,gallery_id,template_id,user_id) VALUES($1,'personal',$2,$3,$4) ON CONFLICT(gallery_type,gallery_id,template_id) DO NOTHING",['gt_'+crypto.randomUUID(),gallery,id,userId]);}
  }
- return {adminList,save,grant,claimLink,claim,wallet,quote,refresh,redeem,transaction};
+ return {findProducts,storefront,adminList,save,grant,claimLink,claim,wallet,quote,refresh,redeem,transaction};
 }
 module.exports={createCouponService};

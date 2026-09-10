@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css?v=133" />
-  </head>
+  <link rel="stylesheet" href="assets/css/shop-coupons.css?v=20260910b"></head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
@@ -187,7 +187,8 @@
             </div>
           </section>
 
-          <div class="product-grid" id="product-grid"></div>
+          <nav class="shop-coupon-tabs" aria-label="Shop categories"><button type="button" data-shop-tab="products" aria-pressed="true">Nail Products / 甲片产品</button><button type="button" data-shop-tab="coupons" aria-pressed="false">Coupons / 优惠券</button></nav>
+          <div class="product-grid" id="product-grid"></div><section id="shop-coupon-list" class="shop-coupon-list" hidden aria-live="polite"></section>
         </section>
 
         <section class="view" id="about-view" data-title-key="pageAbout">
@@ -1031,7 +1032,7 @@
     </div>
     <script src="assets/js/coupon-picker.js?v=20260910"></script>
     <script src="app.js?v=129"></script>
-  </body>
+  <script src="assets/js/shop-coupons.js?v=20260910b"></script></body>
 </html>
 
 
