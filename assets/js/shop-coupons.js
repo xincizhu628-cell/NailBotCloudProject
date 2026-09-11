@@ -1,10 +1,15 @@
 (() => {
  const list=document.querySelector('#shop-coupon-list'),activities=document.querySelector('#coupon-activities');if(!list&&!activities)return;
+ const cacheKey='nailShopCouponSessionCacheV1';
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  function safeUrl(value){if(!value)return '';try{const u=new URL(value,location.href);return ['http:','https:'].includes(u.protocol)?u.href:'';}catch{return '';}}
- let request;function load(){if(!request)request=fetch('/api/shop/coupons',{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'读取失败');return d;}).catch(e=>{request=null;throw e;});return request;}
+ function readCache(){try{return JSON.parse(sessionStorage.getItem(cacheKey)||'null');}catch{return null;}}
+ function writeCache(data){sessionStorage.setItem(cacheKey,JSON.stringify({cachedAt:Date.now(),...data}));}
+ let request;function load(force=false){if(!force){const cached=readCache();if(cached)return Promise.resolve(cached);if(request)return request;}request=fetch('/api/shop/coupons',{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'读取失败');writeCache(d);return d;}).catch(e=>{request=null;throw e;});return request;}
  async function renderCoupons(){list.textContent='Loading coupons...';try{const {coupons}=await load();list.innerHTML=coupons.map(c=>{const url=safeUrl(c.coupon_url),expired=c.expiry_date&&Date.parse(c.expiry_date)<=Date.now();return `<article class="shop-coupon-item"><h3 data-no-translate>${esc(c.coupon_name)}</h3><p>${esc(window.CouponPicker.summary(c))}</p><p>有效期：${esc(c.start_date||'不限')} — ${esc(c.expiry_date||'不限')}</p>${expired?'<p>已过期</p>':url?`<a href="${esc(url)}">Get coupon / 获取优惠券</a>`:'<p>领取方式待公布</p>'}</article>`;}).join('')||'<p>暂无商城优惠券</p>';}catch(e){list.textContent=e.message;}}
  function select(tab,update=true){const coupons=tab==='coupons';document.querySelector('#product-grid').hidden=coupons;list.hidden=!coupons;document.querySelectorAll('[data-shop-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.shopTab===(coupons?'coupons':'products'))));if(update){const url=new URL(location.href);url.searchParams.set('shop',coupons?'coupons':'products');history.replaceState(history.state,'',url);}if(coupons)void renderCoupons();}
+ void load();window.CouponPicker?.preloadWallet?.();
  if(list){document.querySelectorAll('[data-shop-tab]').forEach(b=>b.onclick=()=>select(b.dataset.shopTab));select(new URLSearchParams(location.search).get('shop'),false);window.addEventListener('popstate',()=>select(new URLSearchParams(location.search).get('shop'),false));}
  if(activities)load().then(data=>{activities.innerHTML=data.activities.map(a=>{const title=esc(a.title||a.event_name),url=safeUrl(a.html_url);return url?`<a href="${esc(url)}">${title}</a>`:`<p>${title}</p>`;}).join('')||'<p>No activities currently available.</p>';}).catch(e=>activities.textContent=e.message);
+ window.ShopCoupons={load,clear:()=>sessionStorage.removeItem(cacheKey)};
 })();

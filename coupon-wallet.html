@@ -224,15 +224,17 @@
       </section><aside class="coupon-gain"><h2>How to gain coupons?</h2><a href="index.html?view=products&amp;shop=coupons">Go to Shop / 去商城</a><a href="https://www.tiktok.com/" target="_blank" rel="noopener noreferrer">Go to Tiktok</a><a href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer">Go to Instagram</a><h3>Join Latest Activities</h3><div id="coupon-activities" aria-live="polite">Loading...</div></aside></div>
     </main>
 
-    <script src="assets/js/coupon-picker.js?v=20260910c"></script>
+    <script src="assets/js/coupon-picker.js?v=20260911-cache"></script>
     <script>
       let coupons=[];
       const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       function render(){const labels={money_off:'满减优惠',percent_off:'折扣优惠',buy_x_get_y:'买送优惠',free_product:'免费商品'},filter=document.querySelector('#promo-type-filter').value;
         document.querySelector('#coupon-grid').innerHTML=coupons.filter(c=>!filter||labels[c.deal_type]===filter).map(c=>`<article class="coupon-card"><strong data-no-translate>${esc(c.coupon_name)}</strong><p>${esc(CouponPicker.summary(c))}</p><p>${esc(CouponPicker.stateName[c.coupon_use_status])}</p><p>有效期：${esc(c.start_date||'不限')} 至 ${esc(c.expiry_date||'不限')}</p></article>`).join('')||'<p>暂无优惠券</p>';
       }
-      async function load(){try{const token=new URLSearchParams(location.search).get('claim');const data=await CouponPicker.wallet(token);coupons=data.coupons;document.querySelector('#wallet-title').textContent=`用户 ${data.user.username}，您还有 ${coupons.filter(c=>c.coupon_use_status==='unused').length} 个优惠未使用`;if(token)history.replaceState(null,'','coupon-wallet.html');render();}catch(e){document.querySelector('#wallet-title').textContent=e.message;}}
+      async function load(){try{const token=new URLSearchParams(location.search).get('claim');const data=await CouponPicker.wallet(token,{force:Boolean(token)});coupons=data.coupons;document.querySelector('#wallet-title').textContent=`用户 ${data.user.username}，您还有 ${coupons.filter(c=>c.coupon_use_status==='unused').length} 个优惠未使用`;if(token)history.replaceState(null,'','coupon-wallet.html');render();}catch(e){document.querySelector('#wallet-title').textContent=e.message;}}
       document.querySelector('#promo-type-filter').onchange=render;document.querySelector('#back-btn').onclick=()=>location.href='index.html';void load();
     </script>
-  <script src="assets/js/shop-coupons.js?v=20260910c"></script></body>
+  <script src="assets/js/shop-coupons.js?v=20260911-cache"></script></body>
 </html>
+
+
