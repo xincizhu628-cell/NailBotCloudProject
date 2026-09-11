@@ -8,6 +8,7 @@ const { PGlite } = require('@electric-sql/pglite');
 const { createOrderCodeService, printableUnits } = require('../services/orderCodeService');
 const { createCodeConfirmationService } = require('../services/codeConfirmationService');
 const { createOrderCodeRoutes } = require('../services/orderCodeRoutes');
+const { createManufacturerIntegrationService } = require('../services/manufacturerIntegrationService');
 async function fixture() {
   const db = new PGlite();
   await db.exec(fs.readFileSync('database/schema.postgres.sql','utf8'));
@@ -16,6 +17,7 @@ async function fixture() {
   await db.exec(fs.readFileSync('database/migrations/20260907_unbound_order_codes.sql','utf8'));
   await db.exec(fs.readFileSync('database/migrations/20260909_order_fulfillment.sql','utf8'));
   await db.exec(fs.readFileSync('database/migrations/20260910_manual_codes.sql','utf8'));
+  await db.exec(fs.readFileSync('database/migrations/20260911_manufacturer_push_callbacks.sql','utf8'));
   // PGlite has one connection; serialize leases to exercise repeated concurrent service requests.
   let tail = Promise.resolve();
   const pool = { query: (...args) => db.query(...args), async connect() {
@@ -41,9 +43,9 @@ test('migration, quantities, one pickup, repeat requests, collision and rollback
   try {
     await db.exec(fs.readFileSync('database/migrations/20260907_order_codes.sql','utf8'));
     const runs = await Promise.all(Array.from({length:4}, () => codes.transaction(c => codes.generateForOrder(c,'o'))));
-    assert.equal(runs[0].printCodes.length,3);
+    assert.equal(runs[0].printCodes.length,0);
     assert.equal(new Set(runs.map(x=>x.pickupCode.code)).size,1);
-    assert.equal(new Set([...runs[0].printCodes.map(x=>x.code),runs[0].pickupCode.code]).size,4);
+    assert.equal(new Set([runs[0].pickupCode.code]).size,1);
     const plain = await codes.transaction(c=>codes.generateForOrder(c,'plain'));
     assert.equal(plain.printCodes.length,0); assert.match(plain.pickupCode.code,/^\d{6}$/);
     await assert.rejects(db.query('INSERT INTO "pickup-code"(code,order_id) VALUES ($1,$2)', [runs[0].pickupCode.code,'plain']));
@@ -55,11 +57,7 @@ test('migration, quantities, one pickup, repeat requests, collision and rollback
     const doomed = createOrderCodeService(pool,{randomInt:()=>1});
     await assert.rejects(doomed.transaction(async c=> {await c.query("INSERT INTO orders(order_id,user_id) VALUES ('rolledback','u')");await doomed.generateForOrder(c,'rolledback');}), /exhausted/);
     assert.equal((await db.query("SELECT * FROM orders WHERE order_id='rolledback'")).rows.length,0);
-    await codes.remove('print',runs[0].printCodes[0].id);
-    const repaired = await codes.transaction(c=>codes.generateForOrder(c,'o','print'));
-    assert.equal(repaired.printCodes.length,3);
-    assert.ok(!repaired.printCodes.some(x=>x.code===runs[0].printCodes[0].code));
-    assert.equal((await codes.list('print')).length,3);
+    assert.equal((await codes.list('print')).length,0);
   } finally {await db.close();}
 });
 test('confirmation applies versions atomically and preserves cursor on invalid batch', async()=> {
@@ -79,14 +77,29 @@ test('confirmation applies versions atomically and preserves cursor on invalid b
     assert.equal((await createCodeConfirmationService({pool,codes,env:{},fetchImpl:()=>{throw Error('must not fetch');}}).pollOnce()).skipped,true);
   } finally {await db.close();}
 });
-test('code routes use admin sessions and retain manufacturer token isolation',async()=> {
+
+test('manufacturer activation callback stores print codes and print usage callback updates status', async()=>{
+  const {db,pool,codes}=await fixture();
+  try {
+    const {pickupCode}=await codes.transaction(c=>codes.generateForOrder(c,'o','pickup'));
+    const service=createManufacturerIntegrationService({pool,codes,fetchImpl:async()=>({ok:true,text:async()=>'{"stock":7}'})});
+    const activated=await service.confirmActivation({orderId:'o',pickupCode:pickupCode.code,status:'success',printCodes:[{code:'701001',productId:'p',orderItemId:'i',unitNumber:1},{code:'701002',productId:'p',orderItemId:'i',unitNumber:2}]});
+    assert.equal(activated.pickupCode.sync_status,'success');
+    assert.equal(activated.printCodes.length,2);
+    const saved=await codes.list('print');
+    assert.equal(saved.length,2);assert.equal(saved[0].code_origin,'manufacturer');assert.equal(saved[0].print_use_status,'unused');
+    const used=await service.confirmPrintUsage({printCode:'701001',status:'used'});
+    assert.equal(used.printCode.use_status,'active');assert.equal(used.printCode.print_use_status,'used');
+    await assert.rejects(service.confirmActivation({orderId:'o',pickupCode:pickupCode.code,status:'success',printCodes:['bad']}),/Invalid printCode/);
+  } finally {await db.close();}
+});
+test('code routes use admin sessions and reject retired manufacturer pull endpoint',async()=> {
   let response;
-  const handler=createOrderCodeRoutes({codes:{list:async()=>[]},getAdminSession:async req=>({ok:req.headers.cookie==='admin-session'}),env:{ADMIN_CODE_API_TOKEN:'admin',MANUFACTURER_CODES_API_TOKEN:'factory'},readJson:async()=>({}),sendJson:(res,status,body)=>{response={status,body};}});
+  const handler=createOrderCodeRoutes({codes:{list:async()=>[]},getAdminSession:async req=>({ok:req.headers.cookie==='admin-session'}),readJson:async()=>({}),sendJson:(res,status,body)=>{response={status,body};}});
   const res={setHeader(){}};
   await handler({method:'GET',headers:{}},res,new URL('http://local/api/admin/order-codes')); assert.equal(response.status,401);
   await handler({method:'GET',headers:{authorization:'Bearer factory'}},res,new URL('http://local/api/admin/order-codes')); assert.equal(response.status,401);
-  await handler({method:'DELETE',headers:{authorization:'Bearer factory'}},res,new URL('http://local/api/manufacturer/codes')); assert.equal(response.status,405);
-  await handler({method:'GET',headers:{authorization:'Bearer factory'}},res,new URL('http://local/api/manufacturer/codes')); assert.equal(response.status,200);
+  response=undefined; assert.equal(await handler({method:'GET',headers:{authorization:'Bearer factory'}},res,new URL('http://local/api/manufacturer/codes')),false); assert.equal(response,undefined);
   await handler({method:'GET',headers:{cookie:'admin-session'}},res,new URL('http://local/api/admin/order-codes')); assert.equal(response.status,200);
   await handler({method:'GET',headers:{authorization:'Bearer admin'}},res,new URL('http://local/api/admin/order-codes')); assert.equal(response.status,401);
 });
@@ -100,14 +113,14 @@ test('actual paid-order flow stores all codes and reuses order for payment retry
     const body={amount:10,items:[{id:'p',qty:2},{id:'n',qty:1}]};
     const first=await context.create(body,{paymentId:'payment-1'});
     const again=await context.create(body,{paymentId:'payment-1'});
-    assert.equal(first.orderId,again.orderId); assert.equal(first.printCodes.length,2); assert.equal(first.pickupCode,again.pickupCode);
+    assert.equal(first.orderId,again.orderId); assert.equal(first.printCodes.length,0); assert.equal(first.pickupCode,again.pickupCode); assert.equal(first.containsPrintable,true);
     const normal=await context.create({amount:1,items:[{id:'n',qty:1}]},{paymentId:'payment-2'});
     assert.equal(normal.printCode,null); assert.equal(normal.printCodes.length,0); assert.match(normal.pickupCode,/^\d{6}$/);
     await assert.rejects(context.create({items:[{id:'p',qty:0}]},{paymentId:'payment-invalid'}),/quantity/);
     assert.equal((await db.query("SELECT * FROM orders WHERE payment_provider_id='payment-invalid'")).rows.length,0);
   } finally {await db.close();}
 });
-test('unbound print/pickup routes create unique records, confirm null order, and delete', async()=> {
+test('unbound pickup routes create unique records, confirm null order, and delete; print creation is retired', async()=> {
   const {db,codes}=await fixture();
   try {
     await db.exec(fs.readFileSync('database/migrations/20260907_unbound_order_codes.sql','utf8'));
@@ -116,13 +129,13 @@ test('unbound print/pickup routes create unique records, confirm null order, and
     const req={method:'POST',headers:{cookie:'admin-session'}};
     const res={setHeader(){}};const url=new URL('http://local/api/admin/order-codes');
     const created=[];
-    for(const type of ['print','print','pickup','pickup']) {
+    body={type:'print',code:'800000'};await route(req,res,url);assert.equal(response.status,400);
+    for(const type of ['pickup','pickup']) {
       body={type,code:String(800000+created.length)};await route(req,res,url);assert.equal(response.status,200);
       const r=response.data.record;assert.equal(r.order_id,null);assert.equal(r.use_status,'inactive');assert.equal(r.sync_status,'success');assert.equal(r.code_origin,'manual');assert.match(r.code,/^\d{6}$/);
-      if(type==='print') {assert.equal(r.order_item_id,null);assert.equal(r.product_id,null);}
       created.push({type,...r});
     }
-    assert.equal(new Set(created.map(r=>r.code)).size,4);
+    assert.equal(new Set(created.map(r=>r.code)).size,2);
     for(const r of created) {
       const update={type:r.type,id:r.id,code:r.code,order_id:null,use_status:'active',sync_status:'success',version:2};
       await codes.transaction(c=>codes.applyConfirmations(c,[update]));
@@ -154,18 +167,15 @@ test('Postgres admin authentication accepts existing Python-compatible hashes an
   } finally {await db.close();}
 });
 
-test('manual print binding only: preserve code and states, reject system/pickup edits and duplicate numbers',async()=>{
+test('manual print creation and binding are retired; pickup duplicate protection remains',async()=>{
  const {db,codes}=await fixture();try{
- const row=await codes.addManual('print','001234','o');assert.equal(row.code,'001234');assert.equal(row.sync_status,'success');
- await assert.rejects(codes.addManual('pickup','001234',null),/重复/);
- await assert.rejects(codes.addManual('print','123',null),/六位/);
- await assert.rejects(codes.addManual('print','001235','missing'),/not found/);
- const changed=await codes.rebindManual('print',row.id,'plain');assert.equal(changed.code,row.code);assert.equal(changed.use_status,'inactive');assert.equal(changed.sync_status,'success');
- assert.equal((await db.query("SELECT print_code FROM orders WHERE order_id='o'")).rows[0].print_code,null);
- assert.equal((await db.query("SELECT print_code FROM orders WHERE order_id='plain'")).rows[0].print_code,'001234');
- const unbound=await codes.rebindManual('print',row.id,null);assert.equal(unbound.order_id,null);
- const system=await codes.transaction(c=>codes.generatePrintCode(c));await assert.rejects(codes.rebindManual('print',system.id,'o'),/人工/);
- const pickup=await codes.addManual('pickup','001236','o');await assert.rejects(codes.rebindManual('pickup',pickup.id,'plain'),/不允许/);
+ await assert.rejects(codes.addManual('print','001234','o'),/厂家生成/);
+ await assert.rejects(codes.rebindManual('print',1,'plain'),/厂家回调/);
+ await assert.rejects(codes.addManual('print','123',null),/厂家生成/);
+ const pickup=await codes.addManual('pickup','001236','o');assert.equal(pickup.code,'001236');assert.equal(pickup.sync_status,'success');
+ await assert.rejects(codes.rebindManual('pickup',pickup.id,'plain'),/不允许/);
  await assert.rejects(codes.addManual('pickup','001237','o'),/不允许替换/);
  }finally{await db.close();}
 });
+
+

@@ -1762,6 +1762,27 @@
         });
       }
 
+      function renderDateOrAlwaysField(field, value = "") {
+        const permanent = /^always$/i.test(String(value || ""));
+        return `<label>${escapeHtml(field.label)}<input name="${escapeHtml(field.name)}" type="date" value="${permanent ? "" : escapeHtml(value || "")}" ${permanent ? "disabled" : ""} /></label><label><input name="${escapeHtml(field.name)}_always" type="checkbox" value="1" data-date-always="${escapeHtml(field.name)}" ${permanent ? "checked" : ""} /> 永久有效</label>`;
+      }
+
+      function syncDateOrAlwaysFields(scope = document) {
+        scope.querySelectorAll("[data-date-always]").forEach((checkbox) => {
+          const input = checkbox.form?.elements[checkbox.dataset.dateAlways];
+          if (input) input.disabled = checkbox.checked;
+        });
+      }
+
+      function serializeDateOrAlwaysFields(form) {
+        form.querySelectorAll("[data-date-always]").forEach((checkbox) => {
+          const input = form.elements[checkbox.dataset.dateAlways];
+          if (!input) return;
+          input.disabled = false;
+          if (checkbox.checked) input.value = "Always";
+        });
+      }
+
       function activeProductForm() {
         return productKind.value === "reward"
           ? document.querySelector("#reward-product-form")
@@ -2136,6 +2157,9 @@
           if (field.type === "condition_reward") {
             return renderConditionRewardField(field);
           }
+          if (field.type === "date_or_always") {
+            return renderDateOrAlwaysField(field);
+          }
           if (field.type === "select") {
             const options = (field.options || []).map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join("");
             return `<label${fieldAttrs}>${label}<select name="${name}">${options}</select></label>`;
@@ -2162,6 +2186,7 @@
         syncTaskCreateFields(panel);
         syncPromotionCreateFields(panel);
         syncConditionRewardUnits(panel);
+        syncDateOrAlwaysFields(panel);
       }
 
       function syncEventCreateFields(scope = document) {
@@ -2234,6 +2259,7 @@
         const view = form.dataset.modelCreateForm;
         const submitButton = form.querySelector("[type='submit']");
         serializeConditionRewardFields(form);
+        serializeDateOrAlwaysFields(form);
         const formData = new FormData(form);
         const item = Object.fromEntries(formData.entries());
         const file = formData.get("image_file");
@@ -2363,6 +2389,9 @@
         if (field.type === "condition_reward") {
           return renderConditionRewardField(field, value);
         }
+        if (field.type === "date_or_always") {
+          return renderDateOrAlwaysField(field, value);
+        }
         if (field.type === "select") {
           const options = (field.options || []).map((option) => {
             const selected = String(option.value) === String(value) ? " selected" : "";
@@ -2396,6 +2425,7 @@
           syncConditionRewardUnits(document.querySelector("#admin-edit-form"));
         }
         if (view === "promotion") syncPromotionCreateFields(document.querySelector("#admin-edit-form"));
+        syncDateOrAlwaysFields(document.querySelector("#admin-edit-form"));
         document.querySelector("#admin-edit-status").textContent = "";
         document.querySelector("#admin-edit-modal").classList.remove("hidden");
         document.querySelector("#admin-edit-modal").setAttribute("aria-hidden", "false");
@@ -2428,6 +2458,7 @@
         const form = event.currentTarget;
         const submitButton = form.querySelector("[type='submit']");
         serializeConditionRewardFields(form);
+        serializeDateOrAlwaysFields(form);
         const formData = new FormData(form);
         const item = Object.fromEntries(formData.entries());
         const file = formData.get("image_file");
@@ -2642,6 +2673,32 @@
       }
 
       productKind.addEventListener("change", syncProductImportUi);
+      let productInventoryTimer = null;
+      async function refreshProductInventory() {
+        const status = document.querySelector('[data-product-inventory-status]');
+        const button = document.querySelector('[data-product-inventory-refresh]');
+        if (button) button.disabled = true;
+        if (status) status.textContent = '正在查询厂家库存…';
+        try {
+          const response = await fetch('/api/admin/product-inventory', { method:'POST', credentials:'same-origin', cache:'no-store', headers:{'Content-Type':'application/json'}, body:'{}' });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || '库存查询失败');
+          if (status) status.textContent = `已查询 ${(data.results || []).length} 个商品 · ${new Date().toLocaleTimeString()}`;
+          await loadAdminModels();
+          renderAdminDataTable('product');
+        } catch (error) {
+          if (status) status.textContent = error.message || '库存查询失败';
+        } finally {
+          if (button) button.disabled = false;
+        }
+      }
+      function setProductInventoryTimer(value) {
+        if (productInventoryTimer) clearInterval(productInventoryTimer);
+        productInventoryTimer = null;
+        const ms = Number(value || 0);
+        if (ms > 0) productInventoryTimer = setInterval(() => { if (!document.hidden) void refreshProductInventory(); }, ms);
+      }
+
       productSource.addEventListener("change", syncProductImportUi);
       document.querySelector(".workspace").addEventListener("input", (event) => {
         const search = event.target.closest("[data-admin-search]");
@@ -2669,6 +2726,15 @@
         if (event.target.matches('[data-model-create-form="promotion"] [name="promo_type"]')) {
           syncPromotionCreateFields(event.target.closest("form"));
         }
+        if (event.target.matches("[data-date-always]")) {
+          syncDateOrAlwaysFields(event.target.closest("form"));
+        }
+        if (event.target.matches("[data-product-inventory-interval]")) {
+          setProductInventoryTimer(event.target.value);
+        }
+      });
+      document.querySelector(".workspace").addEventListener("click", (event) => {
+        if (event.target.closest("[data-product-inventory-refresh]")) void refreshProductInventory();
       });
       adminCreateModal.addEventListener("change", (event) => {
         if (event.target.matches('[data-model-create-form="event"] [name="event_type"], [data-model-create-form="event"] [name="discount_type"], [data-model-create-form="event"] [name="promo_scope"]')) {
@@ -2679,6 +2745,9 @@
         }
         if (event.target.matches('[data-model-create-form="promotion"] [name="promo_type"]')) {
           syncPromotionCreateFields(event.target.closest("form"));
+        }
+        if (event.target.matches("[data-date-always]")) {
+          syncDateOrAlwaysFields(event.target.closest("form"));
         }
         if (event.target.matches("[data-reward-type]")) {
           syncConditionRewardUnits(event.target.closest("form") || adminCreateModal);
@@ -2696,6 +2765,9 @@
         }
         if (event.target.matches("[data-reward-type]")) {
           syncConditionRewardUnits(event.currentTarget);
+        }
+        if (event.target.matches("[data-date-always]")) {
+          syncDateOrAlwaysFields(event.currentTarget);
         }
       });
       adminCreateModal.addEventListener("submit", submitModelCreate);
@@ -2964,7 +3036,7 @@
     </script>
     <script src="assets/js/admin-coupons.js?v=20260910b"></script>
     <script src="assets/js/admin-orders.js?v=20260909"></script>
-    <script src="assets/js/admin-order-codes.js?v=20260910-manual"></script>
+    <script src="assets/js/admin-order-codes.js?v=20260911-manufacturer"></script>
   <script src="assets/js/admin-template-editor.js?v=20260909"></script>
   </body>
 </html>

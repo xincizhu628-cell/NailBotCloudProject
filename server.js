@@ -9,11 +9,11 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { createSquarePaymentService } = require("./services/squarePaymentService");
 
 const { createOrderCodeService } = require("./services/orderCodeService");
-const { createCodeConfirmationService } = require("./services/codeConfirmationService");
 const { createTemplateAdminService } = require("./services/templateAdminService");
 const { createUserOrdersService } = require("./services/userOrdersService");
 const { createAdminAuthService } = require("./services/adminAuthService");
 const { createOrderCodeRoutes } = require("./services/orderCodeRoutes");
+const { createManufacturerIntegrationService } = require("./services/manufacturerIntegrationService");
 
 const { createPromotionPricingService } = require('./services/promotionPricingService');
 const { createOrderManagementService, orderGetType } = require('./services/orderManagementService');
@@ -40,7 +40,7 @@ const templateAdminService = pgPool ? createTemplateAdminService(pgPool) : null;
 const userOrdersService = pgPool ? createUserOrdersService({ pool: pgPool, getSession: getPgAuthSession }) : null;
 const pgAdminAuth = pgPool ? createAdminAuthService(pgPool) : null;
 const codeRoutes = createOrderCodeRoutes({ codes: orderCodes, env: process.env, readJson, sendJson, getAdminSession });
-const codeConfirmation = pgPool ? createCodeConfirmationService({ pool: pgPool, codes: orderCodes }) : null;
+const manufacturerIntegration = pgPool && orderCodes ? createManufacturerIntegrationService({ pool: pgPool, codes: orderCodes }) : null;
 const defaultModel = process.env.HF_IMAGE_MODEL || "black-forest-labs/FLUX.1-schnell";
 const defaultArkModel = process.env.ARK_IMAGE_MODEL || "seedream-4-5-251128";
 const defaultArkEndpoint = process.env.ARK_IMAGE_ENDPOINT || "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations";
@@ -70,6 +70,22 @@ const server = http.createServer(async (req, res) => {
     url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
     res.errorContext = requestErrorContext(req, url);
     if (await codeRoutes(req, res, url)) return;
+    if (url.pathname === "/api/manufacturer/code-activation" || url.pathname === "/api/manufacturer/print-usage") {
+      if (req.method !== "POST") { sendJson(res, 405, { ok: false, error: "Method not allowed" }); return; }
+      if (!manufacturerIntegration) { sendJson(res, 503, { ok: false, error: "PostgreSQL is required" }); return; }
+      if (!manufacturerIntegration.tokenOk(req, process.env.MANUFACTURER_CALLBACK_TOKEN)) { sendJson(res, 401, { ok: false, error: "Unauthorized" }); return; }
+      try {
+        await ensurePgAdminRuntimeSchema();
+        const body = await readJson(req);
+        const result = url.pathname.endsWith("print-usage")
+          ? await manufacturerIntegration.confirmPrintUsage(body)
+          : await manufacturerIntegration.confirmActivation(body);
+        sendJson(res, 200, result, { "Cache-Control": "no-store" });
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error.message }, { "Cache-Control": "no-store" });
+      }
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/api/template-image") {
       if(!pgPool){sendJson(res,503,{error:'Database unavailable'});return;}
       const assetId=url.searchParams.get('id');
@@ -98,7 +114,7 @@ const server = http.createServer(async (req, res) => {
     }
     if(url.pathname==='/api/admin/coupons'){
       try{if(!couponService)throw Error('Database unavailable');let result;
-        if(req.method==='GET')result=url.searchParams.has('product')?await couponService.findProducts(url.searchParams.get('product')):await couponService.adminList();
+        if(req.method==='GET')result=url.searchParams.has('product')?await couponService.findProducts(url.searchParams.get('product')):url.searchParams.has('template')?await couponService.findTemplates(url.searchParams.get('template')):await couponService.adminList();
         else {const body=await readJson(req);if(req.method==='POST'&&body.action==='grant')result=await couponService.grant(body.id,body.userIds);
           else if(req.method==='POST'&&body.action==='link')result=await couponService.claimLink(body.id);
           else if(req.method==='POST'||req.method==='PATCH')result=await couponService.save(req.method==='PATCH'?body.id:null,body.item||{});
@@ -121,6 +137,18 @@ const server = http.createServer(async (req, res) => {
         else {sendJson(res,405,{ok:false,error:'Method not allowed'});return;}
         sendJson(res,200,result,{'Cache-Control':'no-store'});
       }catch(error){sendJson(res,400,{ok:false,error:error.message},{'Cache-Control':'no-store'});}
+      return;
+    }
+    if (url.pathname === '/api/admin/order-stock') {
+      if(!manufacturerIntegration){sendJson(res,503,{ok:false,error:'Manufacturer integration is not configured'});return;}
+      try{await ensurePgAdminRuntimeSchema();const body=await readJson(req);if(req.method!=='POST'){sendJson(res,405,{ok:false,error:'Method not allowed'});return;}sendJson(res,200,await manufacturerIntegration.queryOrderStocks(body.orderId||body.order_id),{'Cache-Control':'no-store'});}
+      catch(error){sendJson(res,400,{ok:false,error:error.message},{'Cache-Control':'no-store'});}
+      return;
+    }
+    if (url.pathname === '/api/admin/product-inventory') {
+      if(!manufacturerIntegration){sendJson(res,503,{ok:false,error:'Manufacturer integration is not configured'});return;}
+      try{await ensurePgAdminRuntimeSchema();if(req.method!=='POST'){sendJson(res,405,{ok:false,error:'Method not allowed'});return;}sendJson(res,200,await manufacturerIntegration.queryAllProductStocks(),{'Cache-Control':'no-store'});}
+      catch(error){sendJson(res,400,{ok:false,error:error.message},{'Cache-Control':'no-store'});}
       return;
     }
     if (url.pathname === "/api/admin/template-editor") {
@@ -322,9 +350,7 @@ const nailGenerationTargets = [
   { step: "step2-5", nail: "pinky finger", label: "Pinky" },
 ];
 
-server.on("close", () => codeConfirmation?.stop());
 server.listen(port, "0.0.0.0", () => {
-  codeConfirmation?.start();
   console.log(`AI Nail Studio server running at http://127.0.0.1:${port}/`);
   console.log(`AI image model: ${process.env.HF_IMAGE_MODEL || defaultModel}`);
   console.log(`Ark image model: ${process.env.ARK_IMAGE_MODEL || defaultArkModel}`);
@@ -641,7 +667,7 @@ async function ensurePrintServiceProduct(client, items) {
     )
     VALUES ('PRINT-SERVICE', 'printing_nail', 'AI Nail Print Service (printing available)', $1, 'Printable nail order service', 9999, 9999, 9999, 9999, 9999, 'pickup', 'active')
     ON CONFLICT (product_id) DO UPDATE SET product_type=EXCLUDED.product_type, product_name=EXCLUDED.product_name
-    RETURNING product_id, product_type, product_name, unit_price, bound_device_id, pickup_method
+    RETURNING product_id, product_type, product_name, unit_price, bound_device_id, pickup_method, manufacturer_channel, manufacturer_slot, manufacturer_sku
     `,
     [pgNumber(items.find((item) => item.isPrintService)?.price, 0)],
   )).rows[0];
@@ -677,7 +703,7 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
     const serviceRow = await ensurePrintServiceProduct(client, items);
     const productRows = (await client.query(
       `
-      SELECT product_id, product_type, product_name, unit_price, bound_device_id, pickup_method
+      SELECT product_id, product_type, product_name, unit_price, bound_device_id, pickup_method, manufacturer_channel, manufacturer_slot, manufacturer_sku
       FROM products
       WHERE product_id = ANY($1::text[])
       `,
@@ -736,10 +762,10 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
       );
     }
     if(body.couponSelection)await couponService.redeem(client,body.couponSelection,userId,orderId,body.couponRewardTemplates||[]);
-    generatedCodes = await orderCodes.generateForOrder(client, orderId);
+    generatedCodes = await orderCodes.generateForOrder(client, orderId, 'pickup');
     pickupCode = generatedCodes.pickupCode.code;
-    printCode = generatedCodes.printCodes[0]?.code || null;
-    containsPrintable = generatedCodes.printCodes.length > 0;
+    printCode = null;
+    containsPrintable = rows.some((product) => /printing|打印/i.test(`${product.product_name || ""} ${product.product_type || ""}`));
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
@@ -755,15 +781,15 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
     amount: payment.amount || body.amount,
     currency: body.currency || payment.currency || "AUD",
     pickupCode,
-    printCode,
-    printCodes: generatedCodes.printCodes,
     pickupCodeRecord: generatedCodes.pickupCode,
     containsPrintable,
     boundDeviceId,
     orderedAt: new Date().toISOString(),
     items,
   };
-  const sync = await notifyManufacturerOrder(manufacturerPayload);
+  const sync = (typeof manufacturerIntegration !== "undefined" && manufacturerIntegration)
+    ? await manufacturerIntegration.pushOrder(orderId, generatedCodes.pickupCode, items)
+    : await notifyManufacturerOrder(manufacturerPayload);
   await pgPool.query(
     `
     UPDATE orders
@@ -1480,7 +1506,7 @@ async function handlePgUserPromos(body) {
     `,
     [userId],
   );
-  const available=promos.filter(p=>p.user_status==='unused' && p.status==='active' && (!p.expire_date || Date.parse(p.expire_date)>Date.now()));
+  const available=promos.filter(p=>p.user_status==='unused' && p.status==='active' && (!p.expire_date || /^always$/i.test(String(p.expire_date).trim()) || Date.parse(p.expire_date)>Date.now()));
   return { ok: true, promos:available, user:session.user, total:available.length };
 }
 
@@ -2037,7 +2063,7 @@ async function handlePgAdminModels() {
     models: {
       product: adminModel("Official Product / Reward Library", "id", [...productRows, ...rewardRows], {
         kindKey: "item_kind",
-        columns: ["item_kind", "id", "name", "type", "nail_shape", "bound_device_id", "price_or_points", "stock_by_size", "pickup_method", "is_featured", "status"],
+        columns: ["item_kind", "id", "name", "type", "nail_shape", "bound_device_id", "manufacturer_channel", "manufacturer_slot", "manufacturer_sku", "price_or_points", "stock_by_size", "manufacturer_stock_quantity", "manufacturer_stock_checked_at", "pickup_method", "is_featured", "status"],
         productFields: [
           { name: "product_name", label: "Product name", type: "text" },
           { name: "product_type", label: "Product type", type: "select", options: [{ value: "穿戴甲", label: "穿戴甲" }, { value: "打印甲", label: "打印甲" }, { value: "配件", label: "配件" }] },
@@ -2098,7 +2124,7 @@ async function handlePgAdminModels() {
           { name: "gift_quantity", label: "Gift quantity", type: "number", promoTypes: ["buy_x_get_y"] },
           { name: "free_product", label: "Free product", type: "text", promoTypes: ["free_product"] },
           { name: "description", label: "Description", type: "textarea" },
-          { name: "expire_date", label: "Expire date", type: "date" },
+          { name: "expire_date", label: "Expire date", type: "date_or_always" },
           { name: "status", label: "Status", type: "select", options: [{ value: "active", label: "active" }, { value: "inactive", label: "inactive" }] },
         ],
       }),
@@ -2361,10 +2387,10 @@ async function handlePgAdminImportProduct(body, itemType) {
     `
     INSERT INTO products (
       product_id, product_type, product_name, unit_price, product_info, image_url, image_base64,
-      style_tags, nail_shape, bound_device_id, stock_quantity, stock_s, stock_m, stock_l, stock_xl,
+      style_tags, nail_shape, bound_device_id, manufacturer_channel, manufacturer_slot, manufacturer_sku, stock_quantity, stock_s, stock_m, stock_l, stock_xl,
       on_delivery, pickup_method, is_featured, status
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, COALESCE($19, 'active'))
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, COALESCE($22, 'active'))
     ON CONFLICT (product_id) DO UPDATE SET
       product_type=EXCLUDED.product_type,
       product_name=EXCLUDED.product_name,
@@ -2375,6 +2401,9 @@ async function handlePgAdminImportProduct(body, itemType) {
       style_tags=EXCLUDED.style_tags,
       nail_shape=EXCLUDED.nail_shape,
       bound_device_id=EXCLUDED.bound_device_id,
+      manufacturer_channel=EXCLUDED.manufacturer_channel,
+      manufacturer_slot=EXCLUDED.manufacturer_slot,
+      manufacturer_sku=EXCLUDED.manufacturer_sku,
       stock_quantity=EXCLUDED.stock_quantity,
       stock_s=EXCLUDED.stock_s,
       stock_m=EXCLUDED.stock_m,
@@ -2396,6 +2425,9 @@ async function handlePgAdminImportProduct(body, itemType) {
       cleanPgText(item.style_tags),
       cleanPgText(item.nail_shape),
       boundDeviceId,
+      cleanPgText(item.manufacturer_channel),
+      cleanPgText(item.manufacturer_slot),
+      cleanPgText(item.manufacturer_sku),
       pgInteger(item.stock_quantity || item.stock),
       pgInteger(item.stock_s),
       pgInteger(item.stock_m),
@@ -3183,6 +3215,12 @@ async function ensurePgAdminRuntimeSchema() {
   await pgPool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS sha256 TEXT");
   await pgPool.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_sha256 ON assets(sha256) WHERE sha256 IS NOT NULL AND sha256 <> ''");
   await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
+  await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_channel TEXT");
+  await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_slot TEXT");
+  await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_sku TEXT");
+  await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_stock_quantity INTEGER");
+  await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_stock_payload TEXT");
+  await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_stock_checked_at TIMESTAMPTZ");
   await pgPool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
   await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS print_code TEXT");
   await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_code TEXT NOT NULL DEFAULT '000000'");
@@ -3193,6 +3231,11 @@ async function ensurePgAdminRuntimeSchema() {
   await pgPool.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS manufacturer_response TEXT");
   await pgPool.query("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size TEXT");
   await pgPool.query("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_snapshot TEXT");
+  await pgPool.query(`ALTER TABLE "print-code" ADD COLUMN IF NOT EXISTS print_use_status TEXT NOT NULL DEFAULT 'unused'`);
+  await pgPool.query(`ALTER TABLE "print-code" ADD COLUMN IF NOT EXISTS manufacturer_activation_payload TEXT`);
+  await pgPool.query(`ALTER TABLE "print-code" ADD COLUMN IF NOT EXISTS manufacturer_last_used_at TIMESTAMPTZ`);
+  await pgPool.query(`ALTER TABLE "pickup-code" ADD COLUMN IF NOT EXISTS manufacturer_activation_payload TEXT`);
+  await pgPool.query(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname='print_code_origin_check') THEN ALTER TABLE "print-code" DROP CONSTRAINT print_code_origin_check; END IF; ALTER TABLE "print-code" ADD CONSTRAINT print_code_origin_check CHECK(code_origin IN ('system','manual','manufacturer')); IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='print_code_print_use_status_check') THEN ALTER TABLE "print-code" ADD CONSTRAINT print_code_print_use_status_check CHECK(print_use_status IN ('unused','used')); END IF; END $$;`);
   await pgPool.query(`
     DO $$
     BEGIN

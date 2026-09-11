@@ -7,6 +7,8 @@ test('fulfillment classification, independent states, confirmations, rollback an
  await db.exec(fs.readFileSync('database/migrations/20260907_unbound_order_codes.sql','utf8'));
  await db.exec("INSERT INTO products(product_id,product_name,pickup_method) VALUES ('p','pickup','pickup'),('d','delivery','shipping'),('b','both','both'); INSERT INTO orders(order_id,user_id,payment_status,delivery_status) VALUES('legacy','u','paid','shipped'); INSERT INTO order_items(order_item_id,order_id,product_id) VALUES('legacy-i','legacy','d');");
  await db.exec(fs.readFileSync('database/migrations/20260909_order_fulfillment.sql','utf8'));
+ await db.exec(fs.readFileSync('database/migrations/20260910_manual_codes.sql','utf8'));
+ await db.exec(fs.readFileSync('database/migrations/20260911_manufacturer_push_callbacks.sql','utf8'));
  const pool={query:(...x)=>db.query(...x),connect:async()=>({query:(...x)=>db.query(...x),release(){}})},service=createOrderManagementService(pool),codes=createOrderCodeService(pool);
  assert.equal((await service.detail('legacy')).order.delivery_status,'待送达');
  for(const [id,products,type] of [['pickup',['p'],'pickup'],['delivery',['d'],'delivery'],['mixed',['p','d'],'both'],['both',['b'],'both']]){

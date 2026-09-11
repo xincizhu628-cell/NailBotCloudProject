@@ -1,23 +1,16 @@
 const crypto = require('node:crypto');
 function authorized(req, expected) {
-  const value = String(req.headers.authorization || '').replace(/^Bearer /, '');
+  const value = String(req.headers.authorization || '').replace(/^Bearer /i, '');
   if (!expected || !value) return false;
   const left = Buffer.from(value), right = Buffer.from(expected);
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
-function createOrderCodeRoutes({ codes, env, readJson, sendJson, getAdminSession = async () => ({ ok: false }) }) {
+function createOrderCodeRoutes({ codes, readJson, sendJson, getAdminSession = async () => ({ ok: false }) }) {
   return async function handle(req, res, url) {
-    const admin = url.pathname === '/api/admin/order-codes';
-    const manufacturer = url.pathname === '/api/manufacturer/codes';
-    if (!admin && !manufacturer) return false;
-
+    if (url.pathname !== '/api/admin/order-codes') return false;
     res.setHeader('Cache-Control', 'no-store');
-    if (admin) {
-      const session = await getAdminSession(req);
-      if (!session.ok) { sendJson(res, 401, { ok: false, code: 'ADMIN_SESSION_REQUIRED', error: 'Admin login required.' }); return true; }
-    } else if (!authorized(req, env.MANUFACTURER_CODES_API_TOKEN)) {
-      sendJson(res, 401, { ok: false, error: 'Valid manufacturer API token required' }); return true;
-    }
+    const session = await getAdminSession(req);
+    if (!session.ok) { sendJson(res, 401, { ok: false, code: 'ADMIN_SESSION_REQUIRED', error: 'Admin login required.' }); return true; }
     if (!codes) { sendJson(res, 503, { ok: false, error: 'Database not configured' }); return true; }
     try {
       let data;
@@ -25,17 +18,17 @@ function createOrderCodeRoutes({ codes, env, readJson, sendJson, getAdminSession
         const type = url.searchParams.get('type') || 'print';
         const rows = await codes.list(type, url.searchParams.get('after_id') || '0', url.searchParams.get('limit'));
         data = { rows, next_after_id: rows.at(-1)?.id || null };
-      } else if (admin && req.method === 'POST') {
+      } else if (req.method === 'POST') {
         const body = await readJson(req);
         if (!['print','pickup'].includes(body.type)) throw new Error('Valid type is required');
-        data = { record: await codes.addManual(body.type,body.code,body.order_id) };
-      } else if (admin && req.method === 'PATCH') {
+        data = { record: await codes.addManual(body.type, body.code, body.order_id) };
+      } else if (req.method === 'PATCH') {
         const body = await readJson(req);
-        if(!Object.hasOwn(body,'order_id'))throw new Error('请提供订单编号，解绑时设为空');
-        data = { record: await codes.rebindManual(body.type,body.id,body.order_id) };
-      } else if (admin && req.method === 'DELETE') {
+        if (!Object.hasOwn(body, 'order_id')) throw new Error('请提供订单编号，解绑时设为空');
+        data = { record: await codes.rebindManual(body.type, body.id, body.order_id) };
+      } else if (req.method === 'DELETE') {
         const body = await readJson(req);
-        if (!/^\d+$/.test(String(body.id))) throw new Error('Invalid code id');
+        if (!/^[0-9]+$/.test(String(body.id))) throw new Error('Invalid code id');
         data = await codes.remove(body.type, body.id);
       } else { sendJson(res, 405, { ok: false, error: 'Method not allowed' }); return true; }
       sendJson(res, 200, { ok: true, ...data });

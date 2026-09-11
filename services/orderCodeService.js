@@ -35,16 +35,8 @@ function createOrderCodeService(pool, { randomInt = crypto.randomInt } = {}) {
     }
     throw new Error('Code space is busy or exhausted; retry later. No partial order was saved.');
   }
-  async function generatePrintCode(client, orderId = null, unit = null) {
-    if (orderId === null) {
-      const code = await allocate(client);
-      return (await client.query('INSERT INTO "print-code"(code,order_id) VALUES ($1,NULL) RETURNING *', [code])).rows[0];
-    }
-    await lockOrder(client, orderId);
-    const existing = await client.query('SELECT * FROM "print-code" WHERE order_item_id=$1 AND unit_number=$2', [unit.order_item_id, unit.unit_number]);
-    if (existing.rows.length) return existing.rows[0];
-    const code = await allocate(client);
-    return (await client.query('INSERT INTO "print-code"(code,order_id,order_item_id,product_id,unit_number) VALUES ($1,$2,$3,$4,$5) RETURNING *', [code, orderId, unit.order_item_id, unit.product_id, unit.unit_number])).rows[0];
+  async function generatePrintCode() {
+    throw new Error('打印码由厂家生成，不再支持本地生成');
   }
   async function generatePickupCode(client, orderId = null) {
     if (orderId === null) {
@@ -67,13 +59,9 @@ function createOrderCodeService(pool, { randomInt = crypto.randomInt } = {}) {
       pickup_code=COALESCE((SELECT code FROM "pickup-code" WHERE order_id=$1),'000000') WHERE order_id=$1`, [orderId]);
   }
   async function generateForOrder(client, orderId, type = 'all') {
-    if (!['all','print','pickup'].includes(type)) throw new Error('Unknown code type');
+    if (!['all','pickup'].includes(type)) throw new Error('打印码由厂家生成，不再支持本地生成');
     await lockOrder(client, orderId);
-    if (type !== 'pickup') {
-      const { rows } = await client.query(`SELECT oi.*, p.product_name FROM order_items oi LEFT JOIN products p ON p.product_id=oi.product_id WHERE oi.order_id=$1 ORDER BY oi.order_item_id`, [orderId]);
-      for (const unit of printableUnits(rows)) await generatePrintCode(client, orderId, unit);
-    }
-    if (type !== 'print') await generatePickupCode(client, orderId);
+    await generatePickupCode(client, orderId);
     await updateLegacy(client, orderId);
     return getOrderCodes(client, orderId);
   }
@@ -89,6 +77,7 @@ function createOrderCodeService(pool, { randomInt = crypto.randomInt } = {}) {
     }
   }
   async function addManual(type,code,orderId) {
+    if(type==='print')throw new Error('打印码由厂家生成，不再支持后台创建');
     const target=table(type);orderId=binding(orderId);
     if(typeof code!=='string'||!/^\d{6}$/.test(code))throw new Error('请输入六位纯数字码');
     return transaction(async client=>{
@@ -102,22 +91,7 @@ function createOrderCodeService(pool, { randomInt = crypto.randomInt } = {}) {
     });
   }
   async function rebindManual(type,id,orderId) {
-    if(type!=='print')throw new Error('取货码不允许修改绑定');
-    const target=table(type);orderId=binding(orderId);
-    if(!/^\d+$/.test(String(id)))throw new Error('Invalid code id');
-    return transaction(async client=>{
-      const initial=(await client.query(`SELECT * FROM ${target} WHERE id=$1`,[id])).rows[0];
-      if(!initial)throw new Error('Code not found');
-      if(initial.code_origin!=='manual')throw new Error('只能修改人工录入码的订单绑定');
-      const orders=[...new Set([initial.order_id,orderId].filter(Boolean))].sort();
-      for(const order of orders)await lockOrder(client,order);
-      const row=(await client.query(`SELECT * FROM ${target} WHERE id=$1 FOR UPDATE`,[id])).rows[0];
-      if(!row||row.order_id!==initial.order_id)throw new Error('绑定已变化，请刷新后重试');
-      await checkPickupBinding(client,type,orderId,id);
-      const updated=(await client.query(`UPDATE ${target} SET order_id=$1,updated_at=now() WHERE id=$2 AND code_origin='manual' RETURNING *`,[orderId,id])).rows[0];
-      for(const order of orders)await updateLegacy(client,order);
-      return updated;
-    });
+    throw new Error(type==='print'?'打印码由厂家回调生成，不再支持后台修改绑定':'取货码不允许修改绑定');
   }
   async function list(type, after = '0', limit = 100) {
     table(type);
@@ -156,3 +130,5 @@ function createOrderCodeService(pool, { randomInt = crypto.randomInt } = {}) {
   return { addManual, rebindManual, transaction, generatePrintCode, generatePickupCode, generateForOrder, getOrderCodes, list, remove, applyConfirmations };
 }
 module.exports = { createOrderCodeService, printableUnits };
+
+
