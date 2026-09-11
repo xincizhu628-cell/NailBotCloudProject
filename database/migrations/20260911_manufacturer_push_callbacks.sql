@@ -1,3 +1,5 @@
+ALTER TABLE products ADD COLUMN IF NOT EXISTS bound_device_ids TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS device_channel_code TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_channel TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_slot TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_sku TEXT;

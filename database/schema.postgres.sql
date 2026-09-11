@@ -484,6 +484,8 @@ CREATE TABLE IF NOT EXISTS rewards (
   image_url TEXT,
   image_base64 TEXT,
   bound_device_id TEXT,
+  bound_device_ids TEXT,
+  device_channel_code TEXT,
   on_delivery INTEGER NOT NULL DEFAULT 0,
   pickup_method TEXT NOT NULL DEFAULT 'pickup',
   is_featured INTEGER NOT NULL DEFAULT 0,

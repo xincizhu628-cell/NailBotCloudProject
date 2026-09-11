@@ -82,7 +82,8 @@ test('manufacturer activation callback stores print codes and print usage callba
   const {db,pool,codes}=await fixture();
   try {
     const {pickupCode}=await codes.transaction(c=>codes.generateForOrder(c,'o','pickup'));
-    const service=createManufacturerIntegrationService({pool,codes,fetchImpl:async()=>({ok:true,text:async()=>'{"stock":7}'})});
+    const stockPayloads=[];
+    const service=createManufacturerIntegrationService({pool,codes,env:{MANUFACTURER_STOCK_API_URL:'https://manufacturer.example/stock'},fetchImpl:async(_url,options)=>{stockPayloads.push(JSON.parse(options.body));return {ok:true,text:async()=>JSON.stringify({stock:stockPayloads.length})};}});
     const activated=await service.confirmActivation({orderId:'o',pickupCode:pickupCode.code,status:'success',printCodes:[{code:'701001',productId:'p',orderItemId:'i',unitNumber:1},{code:'701002',productId:'p',orderItemId:'i',unitNumber:2}]});
     assert.equal(activated.pickupCode.sync_status,'success');
     assert.equal(activated.printCodes.length,2);
@@ -91,6 +92,9 @@ test('manufacturer activation callback stores print codes and print usage callba
     const used=await service.confirmPrintUsage({printCode:'701001',status:'used'});
     assert.equal(used.printCode.use_status,'active');assert.equal(used.printCode.print_use_status,'used');
     await assert.rejects(service.confirmActivation({orderId:'o',pickupCode:pickupCode.code,status:'success',printCodes:['bad']}),/Invalid printCode/);
+    await db.query("UPDATE products SET bound_device_ids='dev-a,dev-b',device_channel_code='A01' WHERE product_id='p'");
+    const stock=await service.queryStock({productId:'p'});
+    assert.equal(stock.stocksByDevice.length,2);assert.deepEqual(stock.stocksByDevice.map(x=>x.boundDeviceId),['dev-a','dev-b']);assert.equal(stock.payload.deviceChannelCode,'A01');assert.equal(stock.stock,3);
   } finally {await db.close();}
 });
 test('code routes use admin sessions and reject retired manufacturer pull endpoint',async()=> {
@@ -108,7 +112,7 @@ test('actual paid-order flow stores all codes and reuses order for payment retry
   try {
     const source=fs.readFileSync('server.js','utf8');
     const fn=source.slice(source.indexOf('async function createPaidOrderRecord('),source.indexOf('\nasync function ',source.indexOf('async function createPaidOrderRecord(')+1));
-    const context={orderGetType,crypto,hasPostgresRuntime:()=>true,ensurePgAdminRuntimeSchema:async()=>{},pgPool:pool,orderCodes:codes,cleanPgText:x=>String(x||''),pgNumber:x=>Number(x||0),resolveOrderUserId:async()=> 'u',ensurePrintServiceProduct:async()=>null,notifyManufacturerOrder:async()=>({status:'not_configured',error:'',response:''})};
+    const context={orderGetType,crypto,hasPostgresRuntime:()=>true,ensurePgAdminRuntimeSchema:async()=>{},pgPool:pool,orderCodes:codes,cleanPgText:x=>String(x||''),pgNumber:x=>Number(x||0),resolveOrderUserId:async()=> 'u',ensurePrintServiceProduct:async()=>null,notifyManufacturerOrder:async()=>({status:'not_configured',error:'',response:''}),splitDeviceIds:x=>String(x||'').split(/[，,;；\\s]+/).filter(Boolean)};
     vm.createContext(context); vm.runInContext(fn+'\nthis.create=createPaidOrderRecord',context);
     const body={amount:10,items:[{id:'p',qty:2},{id:'n',qty:1}]};
     const first=await context.create(body,{paymentId:'payment-1'});
@@ -177,5 +181,6 @@ test('manual print creation and binding are retired; pickup duplicate protection
  await assert.rejects(codes.addManual('pickup','001237','o'),/不允许替换/);
  }finally{await db.close();}
 });
+
 
 

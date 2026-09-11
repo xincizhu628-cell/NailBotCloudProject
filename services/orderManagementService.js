@@ -9,7 +9,7 @@ function createOrderManagementService(pool) {
     if(!order)throw new Error('Order not found');
     // Legacy status is retained in SQL for old deployments, not part of the new state model.
     delete order.order_status;
-    const items=(await client.query('SELECT i.*,p.product_name,p.bound_device_id,p.pickup_method,p.manufacturer_channel,p.manufacturer_slot,p.manufacturer_sku,p.manufacturer_stock_quantity,p.manufacturer_stock_checked_at FROM order_items i LEFT JOIN products p ON p.product_id=i.product_id WHERE i.order_id=$1 ORDER BY i.order_item_id',[id])).rows;
+    const items=(await client.query('SELECT i.*,p.product_name,p.bound_device_id,p.bound_device_ids,p.device_channel_code,p.pickup_method,p.manufacturer_channel,p.manufacturer_slot,p.manufacturer_sku,p.manufacturer_stock_quantity,p.manufacturer_stock_checked_at FROM order_items i LEFT JOIN products p ON p.product_id=i.product_id WHERE i.order_id=$1 ORDER BY i.order_item_id',[id])).rows;
     const printCodes=(await client.query('SELECT * FROM "print-code" WHERE order_id=$1 ORDER BY id',[id])).rows;
     const pickupCodes=(await client.query('SELECT * FROM "pickup-code" WHERE order_id=$1 ORDER BY id',[id])).rows;
     return {ok:true,order,items,printCodes,pickupCodes};
@@ -34,3 +34,4 @@ function createOrderManagementService(pool) {
   return {detail,update};
 }
 module.exports={createOrderManagementService,orderGetType};
+

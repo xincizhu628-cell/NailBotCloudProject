@@ -667,7 +667,7 @@ async function ensurePrintServiceProduct(client, items) {
     )
     VALUES ('PRINT-SERVICE', 'printing_nail', 'AI Nail Print Service (printing available)', $1, 'Printable nail order service', 9999, 9999, 9999, 9999, 9999, 'pickup', 'active')
     ON CONFLICT (product_id) DO UPDATE SET product_type=EXCLUDED.product_type, product_name=EXCLUDED.product_name
-    RETURNING product_id, product_type, product_name, unit_price, bound_device_id, pickup_method, manufacturer_channel, manufacturer_slot, manufacturer_sku
+    RETURNING product_id, product_type, product_name, unit_price, bound_device_id, bound_device_ids, device_channel_code, pickup_method, manufacturer_channel, manufacturer_slot, manufacturer_sku
     `,
     [pgNumber(items.find((item) => item.isPrintService)?.price, 0)],
   )).rows[0];
@@ -703,7 +703,7 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
     const serviceRow = await ensurePrintServiceProduct(client, items);
     const productRows = (await client.query(
       `
-      SELECT product_id, product_type, product_name, unit_price, bound_device_id, pickup_method, manufacturer_channel, manufacturer_slot, manufacturer_sku
+      SELECT product_id, product_type, product_name, unit_price, bound_device_id, bound_device_ids, device_channel_code, pickup_method, manufacturer_channel, manufacturer_slot, manufacturer_sku
       FROM products
       WHERE product_id = ANY($1::text[])
       `,
@@ -716,7 +716,8 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
 
     boundDeviceId = cleanPgText(items.find((item) => item.pickupDeviceId)?.pickupDeviceId)
       || cleanPgText(items.find((item) => item.boundDeviceId)?.boundDeviceId)
-      || cleanPgText(rows.find((product) => product.bound_device_id)?.bound_device_id);
+      || cleanPgText(rows.find((product) => product.bound_device_id)?.bound_device_id)
+      || cleanPgText(splitDeviceIds(rows.find((product) => product.bound_device_ids)?.bound_device_ids)[0]);
     if(body.reservedOrderId){const changed=await client.query("UPDATE orders SET total_price=$1,pay_method=$2,payment_status='paid',order_get_type=$3,paid_at=CURRENT_TIMESTAMP,bound_device_id=$4,payment_provider_id=$5,manufacturer_sync_status='pending' WHERE order_id=$6 AND user_id=$7 AND payment_status='pending' RETURNING order_id",[pgNumber(body.amount),Number(body.amount)===0?'coupon':'square',orderGetType(rows),boundDeviceId,paymentId,orderId,userId]);if(changed.rows.length!==1)throw Error('Reserved order is not available');}
     else {
     await client.query(
@@ -2012,6 +2013,13 @@ async function handlePgAdminModels() {
     nail_shape: item.nail_shape,
     style_tags: item.style_tags,
     bound_device_id: item.bound_device_id || "",
+    bound_device_ids: item.bound_device_ids || item.bound_device_id || "",
+    device_channel_code: item.device_channel_code || "",
+    manufacturer_channel: item.manufacturer_channel || "",
+    manufacturer_slot: item.manufacturer_slot || "",
+    manufacturer_sku: item.manufacturer_sku || "",
+    manufacturer_stock_quantity: item.manufacturer_stock_quantity ?? "",
+    manufacturer_stock_checked_at: item.manufacturer_stock_checked_at || "",
     price_or_points: item.unit_price,
     stock_quantity: item.stock_quantity,
     stock_s: item.stock_s,
@@ -2063,14 +2071,15 @@ async function handlePgAdminModels() {
     models: {
       product: adminModel("Official Product / Reward Library", "id", [...productRows, ...rewardRows], {
         kindKey: "item_kind",
-        columns: ["item_kind", "id", "name", "type", "nail_shape", "bound_device_id", "manufacturer_channel", "manufacturer_slot", "manufacturer_sku", "price_or_points", "stock_by_size", "manufacturer_stock_quantity", "manufacturer_stock_checked_at", "pickup_method", "is_featured", "status"],
+        columns: ["item_kind", "id", "name", "type", "nail_shape", "bound_device_ids", "device_channel_code", "manufacturer_channel", "manufacturer_slot", "manufacturer_sku", "price_or_points", "stock_by_size", "manufacturer_stock_quantity", "manufacturer_stock_checked_at", "pickup_method", "is_featured", "status"],
         productFields: [
           { name: "product_name", label: "Product name", type: "text" },
           { name: "product_type", label: "Product type", type: "select", options: [{ value: "穿戴甲", label: "穿戴甲" }, { value: "打印甲", label: "打印甲" }, { value: "配件", label: "配件" }] },
           { name: "unit_price", label: "Unit price", type: "number" },
           { name: "nail_shape", label: "Nail shape", type: "select", options: shapeOptions },
           { name: "style_tags", label: "Style", type: "select", options: styleOptions },
-          { name: "bound_device_id", label: "绑定设备", type: "select", options: mainDeviceOptions },
+          { name: "bound_device_ids", label: "绑定设备编号（多个用逗号分隔）", type: "text" },
+          { name: "device_channel_code", label: "设备货道编号", type: "text" },
           { name: "stock_s", label: "Stock S", type: "number" },
           { name: "stock_m", label: "Stock M", type: "number" },
           { name: "stock_l", label: "Stock L", type: "number" },
@@ -2332,7 +2341,10 @@ async function handlePgAdminImportProduct(body, itemType) {
     return { ok: false, error: "Cloud XLSX import is not enabled yet. Please use single item import for Railway." };
   }
   const item = body.item || {};
-  const boundDeviceId = await validatePgBoundDevice(item.bound_device_id);
+  const boundDevices = await validatePgBoundDevices(item.bound_device_ids || item.bound_device_id);
+  const boundDeviceId = boundDevices.primary;
+  const boundDeviceIds = boundDevices.list.join(",");
+  const deviceChannelCode = cleanPgText(item.device_channel_code);
   if (itemType === "reward") {
     const rewardId = cleanPgText(item.reward_id || item.id, `reward_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`);
     const imageAsset = await resolvePgProductImageInput("rewards", "reward_id", rewardId, item, "reward-products");
@@ -2387,10 +2399,10 @@ async function handlePgAdminImportProduct(body, itemType) {
     `
     INSERT INTO products (
       product_id, product_type, product_name, unit_price, product_info, image_url, image_base64,
-      style_tags, nail_shape, bound_device_id, manufacturer_channel, manufacturer_slot, manufacturer_sku, stock_quantity, stock_s, stock_m, stock_l, stock_xl,
+      style_tags, nail_shape, bound_device_id, bound_device_ids, device_channel_code, manufacturer_channel, manufacturer_slot, manufacturer_sku, stock_quantity, stock_s, stock_m, stock_l, stock_xl,
       on_delivery, pickup_method, is_featured, status
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, COALESCE($22, 'active'))
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, COALESCE($24, 'active'))
     ON CONFLICT (product_id) DO UPDATE SET
       product_type=EXCLUDED.product_type,
       product_name=EXCLUDED.product_name,
@@ -2401,6 +2413,8 @@ async function handlePgAdminImportProduct(body, itemType) {
       style_tags=EXCLUDED.style_tags,
       nail_shape=EXCLUDED.nail_shape,
       bound_device_id=EXCLUDED.bound_device_id,
+      bound_device_ids=EXCLUDED.bound_device_ids,
+      device_channel_code=EXCLUDED.device_channel_code,
       manufacturer_channel=EXCLUDED.manufacturer_channel,
       manufacturer_slot=EXCLUDED.manufacturer_slot,
       manufacturer_sku=EXCLUDED.manufacturer_sku,
@@ -2425,6 +2439,8 @@ async function handlePgAdminImportProduct(body, itemType) {
       cleanPgText(item.style_tags),
       cleanPgText(item.nail_shape),
       boundDeviceId,
+      boundDeviceIds,
+      deviceChannelCode,
       cleanPgText(item.manufacturer_channel),
       cleanPgText(item.manufacturer_slot),
       cleanPgText(item.manufacturer_sku),
@@ -3215,6 +3231,8 @@ async function ensurePgAdminRuntimeSchema() {
   await pgPool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS sha256 TEXT");
   await pgPool.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_sha256 ON assets(sha256) WHERE sha256 IS NOT NULL AND sha256 <> ''");
   await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS bound_device_id TEXT");
+  await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS bound_device_ids TEXT");
+  await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS device_channel_code TEXT");
   await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_channel TEXT");
   await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_slot TEXT");
   await pgPool.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_sku TEXT");
@@ -3368,6 +3386,31 @@ async function resolvePgProductImageInput(table, idColumn, id, item, assetType) 
     imageBase64: existing?.image_base64 || "",
     assetId: "",
   };
+}
+
+function splitDeviceIds(value) {
+  if (Array.isArray(value)) return value.map((item) => cleanPgText(item)).filter(Boolean);
+  return String(value || "").split(/[，,;；\s]+/).map((item) => cleanPgText(item)).filter(Boolean);
+}
+
+async function validatePgBoundDevices(value) {
+  const deviceIds = [...new Set(splitDeviceIds(value))];
+  if (!deviceIds.length) return { primary: "", list: [] };
+  await ensurePgAdminRuntimeSchema();
+  const rows = (await pgPool.query(
+    `
+    SELECT equip_id
+    FROM device_info
+    WHERE equip_id = ANY($1::text[])
+      AND type IN ('主机', 'main_unit')
+      AND COALESCE(status, 'active')='active'
+    `,
+    [deviceIds],
+  )).rows.map((row) => row.equip_id);
+  const found = new Set(rows);
+  const missing = deviceIds.filter((id) => !found.has(id));
+  if (missing.length) throw new Error(`设备不存在无法添加：${missing.join(", ")}`);
+  return { primary: deviceIds[0], list: deviceIds };
 }
 
 async function validatePgBoundDevice(value) {
@@ -3625,6 +3668,13 @@ async function loadPgProducts() {
       p.style_tags,
       p.nail_shape,
       p.bound_device_id,
+      p.bound_device_ids,
+      p.device_channel_code,
+      p.manufacturer_channel,
+      p.manufacturer_slot,
+      p.manufacturer_sku,
+      p.manufacturer_stock_quantity,
+      p.manufacturer_stock_checked_at,
       p.image_base64,
       p.stock_quantity,
       p.stock_s,
@@ -4803,3 +4853,7 @@ function escapeXml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
 }
+
+
+
+

@@ -35,6 +35,19 @@ function syncStatus(value) {
   throw new Error("Invalid sync status");
 }
 
+function splitDeviceIds(value) {
+  if (Array.isArray(value)) return value.map((item) => clean(item)).filter(Boolean);
+  return String(value || "").split(/[，,;；\s]+/).map((item) => clean(item)).filter(Boolean);
+}
+
+function firstDevice(...values) {
+  for (const value of values) {
+    const ids = splitDeviceIds(value);
+    if (ids.length) return ids[0];
+  }
+  return "";
+}
+
 function sixDigit(value, label = "code") {
   const code = clean(value);
   if (!/^\d{6}$/.test(code)) throw new Error(`Invalid ${label}`);
@@ -62,7 +75,7 @@ function createManufacturerIntegrationService({ pool, codes, env = process.env, 
     if (!order) throw new Error("Order not found");
     const items = (await client.query(`
       SELECT i.order_item_id,i.product_id,i.quantity,i.unit_price,i.size,i.item_snapshot,
-             p.product_name,p.product_type,p.bound_device_id,p.pickup_method,
+             p.product_name,p.product_type,p.bound_device_id,p.bound_device_ids,p.device_channel_code,p.pickup_method,
              p.manufacturer_channel,p.manufacturer_slot,p.manufacturer_sku
       FROM order_items i
       LEFT JOIN products p ON p.product_id=i.product_id
@@ -80,7 +93,9 @@ function createManufacturerIntegrationService({ pool, codes, env = process.env, 
         quantity: Number(item.quantity || 0),
         size: item.size || source.size || "",
         unitPrice: Number(item.unit_price || 0),
-        boundDeviceId: clean(source.pickupDeviceId || source.boundDeviceId || item.bound_device_id || order.bound_device_id),
+        boundDeviceId: firstDevice(source.pickupDeviceId, source.boundDeviceId, source.boundDeviceIds, item.bound_device_ids, item.bound_device_id, order.bound_device_id),
+        boundDeviceIds: [...new Set([...splitDeviceIds(source.boundDeviceIds || source.bound_device_ids), ...splitDeviceIds(source.pickupDeviceId || source.boundDeviceId), ...splitDeviceIds(item.bound_device_ids || item.bound_device_id)])],
+        deviceChannelCode: clean(source.deviceChannelCode || source.device_channel_code || item.device_channel_code),
         pickupMethod: item.pickup_method || snapshot.pickup_method || "",
         channel: clean(source.channel || source.manufacturer_channel || item.manufacturer_channel),
         slot: clean(source.slot || source.manufacturer_slot || item.manufacturer_slot),
@@ -156,35 +171,44 @@ function createManufacturerIntegrationService({ pool, codes, env = process.env, 
   async function queryStock(input = {}) {
     const productId = clean(input.productId || input.product_id);
     if (!productId) throw new Error("productId is required");
-    const product = (await pool.query("SELECT product_id,product_name,bound_device_id,manufacturer_channel,manufacturer_slot,manufacturer_sku FROM products WHERE product_id=$1", [productId])).rows[0];
+    const product = (await pool.query("SELECT product_id,product_name,bound_device_id,bound_device_ids,device_channel_code,manufacturer_channel,manufacturer_slot,manufacturer_sku FROM products WHERE product_id=$1", [productId])).rows[0];
     if (!product) throw new Error("Product not found");
-    const payload = {
+    const basePayload = {
       orderId: clean(input.orderId || input.order_id),
       productId,
       productName: product.product_name || "",
-      boundDeviceId: clean(input.boundDeviceId || input.bound_device_id || product.bound_device_id),
       channel: clean(input.channel || product.manufacturer_channel),
       slot: clean(input.slot || product.manufacturer_slot),
+      deviceChannelCode: clean(input.deviceChannelCode || input.device_channel_code || product.device_channel_code),
       manufacturerSku: clean(input.manufacturerSku || product.manufacturer_sku),
     };
-    const sync = await postJson(clean(env.MANUFACTURER_STOCK_API_URL), payload);
-    let quantity = null;
-    try {
-      const body = JSON.parse(sync.response || "{}");
-      quantity = Number(body.stock ?? body.quantity ?? body.inventory);
-      if (!Number.isFinite(quantity)) quantity = null;
-    } catch {}
-    if (quantity !== null) {
-      await pool.query("UPDATE products SET manufacturer_stock_quantity=$1,manufacturer_stock_payload=$2,manufacturer_stock_checked_at=now() WHERE product_id=$3", [Math.max(0, Math.floor(quantity)), sync.response, productId]);
+    const deviceIds = [...new Set([...splitDeviceIds(input.boundDeviceIds || input.bound_device_ids), ...splitDeviceIds(input.boundDeviceId || input.bound_device_id), ...splitDeviceIds(product.bound_device_ids || product.bound_device_id)])];
+    const targets = deviceIds.length ? deviceIds : [""];
+    const stocksByDevice = [];
+    for (const deviceId of targets) {
+      const payload = { ...basePayload, boundDeviceId: deviceId, boundDeviceIds: deviceIds };
+      const sync = await postJson(clean(env.MANUFACTURER_STOCK_API_URL), payload);
+      let stock = null;
+      try {
+        const body = JSON.parse(sync.response || "{}");
+        stock = Number(body.stock ?? body.quantity ?? body.inventory);
+        if (!Number.isFinite(stock)) stock = null;
+      } catch {}
+      stocksByDevice.push({ ok: sync.status !== "failed", ...sync, stock, boundDeviceId: deviceId, payload });
     }
-    return { ok: sync.status !== "failed", ...sync, stock: quantity, productId, payload };
+    const quantities = stocksByDevice.map((item) => item.stock).filter((value) => value !== null);
+    const quantity = quantities.length ? quantities.reduce((sum, value) => sum + value, 0) : null;
+    if (quantity !== null) {
+      await pool.query("UPDATE products SET manufacturer_stock_quantity=$1,manufacturer_stock_payload=$2,manufacturer_stock_checked_at=now() WHERE product_id=$3", [Math.max(0, Math.floor(quantity)), JSON.stringify(stocksByDevice).slice(0, 4000), productId]);
+    }
+    return { ok: stocksByDevice.some((item) => item.ok), status: stocksByDevice.some((item) => item.status === "failed") ? "partial" : "synced", error: stocksByDevice.find((item) => item.error)?.error || "", response: JSON.stringify(stocksByDevice).slice(0, 4000), stock: quantity, stocksByDevice, productId, payload: { ...basePayload, boundDeviceIds: deviceIds } };
   }
 
   async function queryOrderStocks(orderId) {
     const id = clean(orderId);
     if (!id) throw new Error("orderId is required");
     const rows = (await pool.query(`
-      SELECT i.order_item_id,i.product_id,i.quantity,p.product_name,p.bound_device_id,p.manufacturer_channel,p.manufacturer_slot,p.manufacturer_sku
+      SELECT i.order_item_id,i.product_id,i.quantity,p.product_name,p.bound_device_id,p.bound_device_ids,p.device_channel_code,p.manufacturer_channel,p.manufacturer_slot,p.manufacturer_sku
       FROM order_items i
       LEFT JOIN products p ON p.product_id=i.product_id
       WHERE i.order_id=$1
@@ -195,7 +219,8 @@ function createManufacturerIntegrationService({ pool, codes, env = process.env, 
       results.push(await queryStock({
         orderId: id,
         productId: row.product_id,
-        boundDeviceId: row.bound_device_id,
+        boundDeviceIds: row.bound_device_ids || row.bound_device_id,
+        deviceChannelCode: row.device_channel_code,
         channel: row.manufacturer_channel,
         slot: row.manufacturer_slot,
         manufacturerSku: row.manufacturer_sku,
