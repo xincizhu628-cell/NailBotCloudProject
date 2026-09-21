@@ -373,6 +373,8 @@ def request_verification_code(connection, payload):
         (verification_id, target_type, target_value, purpose, code_hash, code_salt),
     )
     send_result = send_verification_code(target_type, target_value, code, purpose)
+    if not send_result.get("sent"):
+        raise ValueError(send_result.get("reason") or send_result.get("message") or "Verification delivery is unavailable.")
     return {
         "ok": True,
         "verificationId": verification_id,

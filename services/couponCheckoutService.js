@@ -7,7 +7,9 @@ function createCouponCheckoutService({pool,coupons,payment,createOrder,getSessio
  attempt=await coupons.transaction(async c=>{
   const row=(await c.query('SELECT u.*,c.updated_at,c.status AS listing_status,c.start_date,c.expiry_date FROM user_coupons u JOIN coupons c ON c.coupon_id=u.coupon_id WHERE user_coupon_id=$1 AND user_id=$2 FOR UPDATE OF u,c',[body.couponSelection,userId])).rows[0];
   const same=(await c.query('SELECT * FROM coupon_checkouts WHERE checkout_id=$1 AND user_id=$2',[key,userId])).rows[0];if(same)return same;
-  if(!row||row.coupon_use_status!=='unused'||row.checkout_id||row.listing_status!=='published'||(row.start_date&&Date.parse(row.start_date)>Date.now())||(row.expiry_date&&Date.parse(row.expiry_date)<=Date.now()))throw Error('优惠券已使用或有待完成的付款，请先完成原订单');
+  const expires=String(row?.expiry_date||'').trim();
+  const permanent=/^always$/i.test(expires);
+  if(!row||row.coupon_use_status!=='unused'||row.checkout_id||row.listing_status!=='published'||(row.start_date&&Date.parse(row.start_date)>Date.now())||(expires&&!permanent&&Date.parse(expires)<=Date.now()))throw Error('优惠券已使用或有待完成的付款，请先完成原订单');
   if(new Date(row.updated_at).toISOString()!==quote.couponRevision)throw Error('优惠券已修改，请刷新报价');
   const id='order_'+crypto.randomUUID().replace(/-/g,'');await c.query("INSERT INTO orders(order_id,user_id,total_price,payment_status) VALUES($1,$2,$3,'pending')",[id,userId,quote.total]);
   await c.query('UPDATE user_coupons SET order_id=$1,checkout_id=$2 WHERE user_coupon_id=$3',[id,key,row.user_coupon_id]);
@@ -28,7 +30,7 @@ function createCouponCheckoutService({pool,coupons,payment,createOrder,getSessio
  }
  const orderBody={...attempt.payment_request,sessionId:body.sessionId,reservedOrderId:attempt.order_id,couponSelection:attempt.user_coupon_id,couponUserId:userId,couponRewardTemplates:attempt.quote.rewardTemplates||[]};
  try{const order=await createOrder(orderBody,result.body);result={...result,body:{...result.body,order}};await pool.query("UPDATE coupon_checkouts SET status='paid',payment_result=$1,payment_request=payment_request-'sourceId' WHERE checkout_id=$2",[JSON.stringify(result),key]);return result;}
- catch(error){return {httpStatus:503,body:{ok:false,error:'支付已成功，订单正在完成，请用原付款重试。',retrySameAttempt:true}};}
+ catch(error){console.error('Coupon paid-order completion failed:',error);return {httpStatus:503,body:{ok:false,error:'支付已成功，订单正在完成，请用原付款重试。',retrySameAttempt:true}};}
  }
  return {pay};
 }

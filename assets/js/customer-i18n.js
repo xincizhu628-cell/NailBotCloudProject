@@ -64,6 +64,16 @@ Back to login|返回登录
 Back to member center|返回会员中心
 Back to task center|返回任务中心
 Profile|个人资料
+Avatar|头像
+Profile picture|个人头像
+Change avatar|更换头像
+Choose avatar|选择头像
+Edit profile|编辑个人资料
+Edit user ID|修改用户编号
+Edit username|修改用户名
+New value|新内容
+Public user identifier|公开用户编号
+Third-party account linking is not available yet. OAuth provider credentials and callbacks have not been configured.|第三方账户绑定暂未开放，平台登录凭据及回调尚未配置。
 Loading profile...|正在加载个人资料…
 Edit contact|修改联系方式
 Current verification code|当前验证码

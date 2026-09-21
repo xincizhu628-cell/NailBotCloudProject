@@ -35,6 +35,7 @@ async function requestCode() {
     if (!response.ok || !payload.ok) throw new Error(payload.error || "Failed to request verification code.");
     verificationId = payload.verificationId;
     $("#create-code-panel")?.classList.remove("hidden");
+    showMessage($("#create-dev-code"), payload.delivery?.sent ? "验证码已发送，请检查邮箱或短信。" : (payload.delivery?.message || "验证码未发送。"));
     if (payload.delivery?.devCode) {
       showMessage($("#create-dev-code"), `Development code: ${payload.delivery.devCode}`);
     }

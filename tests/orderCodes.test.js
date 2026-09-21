@@ -112,7 +112,7 @@ test('actual paid-order flow stores all codes and reuses order for payment retry
   try {
     const source=fs.readFileSync('server.js','utf8');
     const fn=source.slice(source.indexOf('async function createPaidOrderRecord('),source.indexOf('\nasync function ',source.indexOf('async function createPaidOrderRecord(')+1));
-    const context={orderGetType,crypto,hasPostgresRuntime:()=>true,ensurePgAdminRuntimeSchema:async()=>{},pgPool:pool,orderCodes:codes,cleanPgText:x=>String(x||''),pgNumber:x=>Number(x||0),resolveOrderUserId:async()=> 'u',ensurePrintServiceProduct:async()=>null,notifyManufacturerOrder:async()=>({status:'not_configured',error:'',response:''}),splitDeviceIds:x=>String(x||'').split(/[，,;；\\s]+/).filter(Boolean)};
+    const context={orderGetType,crypto,process:{env:{}},hasPostgresRuntime:()=>true,ensurePgAdminRuntimeSchema:async()=>{},pgPool:pool,orderCodes:codes,cleanPgText:x=>String(x||''),pgNumber:x=>Number(x||0),resolveOrderUserId:async()=> 'u',ensurePrintServiceProduct:async()=>null,notifyManufacturerOrder:async()=>({status:'not_configured',error:'',response:''}),splitDeviceIds:x=>String(x||'').split(/[，,;；\\s]+/).filter(Boolean)};
     vm.createContext(context); vm.runInContext(fn+'\nthis.create=createPaidOrderRecord',context);
     const body={amount:10,items:[{id:'p',qty:2},{id:'n',qty:1}]};
     const first=await context.create(body,{paymentId:'payment-1'});
@@ -124,7 +124,7 @@ test('actual paid-order flow stores all codes and reuses order for payment retry
     assert.equal((await db.query("SELECT * FROM orders WHERE payment_provider_id='payment-invalid'")).rows.length,0);
   } finally {await db.close();}
 });
-test('unbound pickup routes create unique records, confirm null order, and delete; print creation is retired', async()=> {
+test('unbound manual print and pickup routes create unique records, confirm null order, and delete', async()=> {
   const {db,codes}=await fixture();
   try {
     await db.exec(fs.readFileSync('database/migrations/20260907_unbound_order_codes.sql','utf8'));
@@ -133,13 +133,12 @@ test('unbound pickup routes create unique records, confirm null order, and delet
     const req={method:'POST',headers:{cookie:'admin-session'}};
     const res={setHeader(){}};const url=new URL('http://local/api/admin/order-codes');
     const created=[];
-    body={type:'print',code:'800000'};await route(req,res,url);assert.equal(response.status,400);
-    for(const type of ['pickup','pickup']) {
+    for(const type of ['print','pickup','pickup']) {
       body={type,code:String(800000+created.length)};await route(req,res,url);assert.equal(response.status,200);
       const r=response.data.record;assert.equal(r.order_id,null);assert.equal(r.use_status,'inactive');assert.equal(r.sync_status,'success');assert.equal(r.code_origin,'manual');assert.match(r.code,/^\d{6}$/);
       created.push({type,...r});
     }
-    assert.equal(new Set(created.map(r=>r.code)).size,2);
+    assert.equal(new Set(created.map(r=>r.code)).size,3);
     for(const r of created) {
       const update={type:r.type,id:r.id,code:r.code,order_id:null,use_status:'active',sync_status:'success',version:2};
       await codes.transaction(c=>codes.applyConfirmations(c,[update]));
@@ -171,11 +170,12 @@ test('Postgres admin authentication accepts existing Python-compatible hashes an
   } finally {await db.close();}
 });
 
-test('manual print creation and binding are retired; pickup duplicate protection remains',async()=>{
+test('manual print codes can be entered and rebound; pickup duplicate protection remains',async()=>{
  const {db,codes}=await fixture();try{
- await assert.rejects(codes.addManual('print','001234','o'),/厂家生成/);
- await assert.rejects(codes.rebindManual('print',1,'plain'),/厂家回调/);
- await assert.rejects(codes.addManual('print','123',null),/厂家生成/);
+ const print=await codes.addManual('print','001234','o');
+ assert.equal(print.sync_status,'success');assert.equal(print.use_status,'inactive');
+ const rebound=await codes.rebindManual('print',print.id,'plain');assert.equal(rebound.order_id,'plain');
+ await assert.rejects(codes.addManual('print','123',null),/六位/);
  const pickup=await codes.addManual('pickup','001236','o');assert.equal(pickup.code,'001236');assert.equal(pickup.sync_status,'success');
  await assert.rejects(codes.rebindManual('pickup',pickup.id,'plain'),/不允许/);
  await assert.rejects(codes.addManual('pickup','001237','o'),/不允许替换/);

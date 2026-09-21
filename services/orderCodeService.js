@@ -77,7 +77,6 @@ function createOrderCodeService(pool, { randomInt = crypto.randomInt } = {}) {
     }
   }
   async function addManual(type,code,orderId) {
-    if(type==='print')throw new Error('打印码由厂家生成，不再支持后台创建');
     const target=table(type);orderId=binding(orderId);
     if(typeof code!=='string'||!/^\d{6}$/.test(code))throw new Error('请输入六位纯数字码');
     return transaction(async client=>{
@@ -91,7 +90,18 @@ function createOrderCodeService(pool, { randomInt = crypto.randomInt } = {}) {
     });
   }
   async function rebindManual(type,id,orderId) {
-    throw new Error(type==='print'?'打印码由厂家回调生成，不再支持后台修改绑定':'取货码不允许修改绑定');
+    if(type!=='print')throw new Error('取货码不允许修改绑定');
+    orderId=binding(orderId);
+    return transaction(async client=>{
+      const old=(await client.query('SELECT * FROM "print-code" WHERE id=$1 FOR UPDATE',[id])).rows[0];
+      if(!old)throw new Error('打印码不存在');
+      if(old.code_origin!=='manual')throw new Error('只能修改人工录入的打印码');
+      if(orderId)await lockOrder(client,orderId);
+      const row=(await client.query('UPDATE "print-code" SET order_id=$1,updated_at=now() WHERE id=$2 RETURNING *',[orderId,id])).rows[0];
+      if(old.order_id)await updateLegacy(client,old.order_id);
+      if(orderId)await updateLegacy(client,orderId);
+      return row;
+    });
   }
   async function list(type, after = '0', limit = 100) {
     table(type);

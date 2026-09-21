@@ -2390,7 +2390,7 @@ select {
 }
 
 .personal-design-grid {
-  max-height: 520px;
+  max-height: min(520px, 72vh);
   overflow-y: auto;
   padding: 4px 8px 8px 4px;
 }
@@ -3109,7 +3109,7 @@ select {
 .template-cover {
   position: relative;
   display: block;
-  aspect-ratio: 420 / 760;
+  aspect-ratio: 3 / 4;
   min-height: 0;
   border-radius: 8px;
   border: 1px solid rgba(223, 94, 147, 0.12);
@@ -3267,14 +3267,15 @@ select {
 }
 
 .template-detail-image {
-  min-height: 420px;
+  min-height: 0;
+  aspect-ratio: 3 / 4;
   border-radius: 8px;
   border: 1px solid rgba(223, 94, 147, 0.14);
   background: var(--thumb);
   background-size: cover;
   background-position: center;
   justify-self: center;
-  width: min(330px, 70%);
+  width: min(300px, 70%);
 }
 
 .template-detail-copy h3 {
@@ -6653,7 +6654,8 @@ select {
   top: clamp(92px, 12vh, 118px);
   bottom: clamp(76px, 10vh, 96px);
   z-index: 6;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   max-height: calc(100% - clamp(168px, 22vh, 214px));
   border: 1px solid rgba(255, 255, 255, 0.66);
   border-radius: 8px;
@@ -6751,6 +6753,15 @@ select {
 .layer-row strong,
 .material-tile {
   font-size: clamp(0.68rem, 1.1vw, 0.82rem);
+}
+
+.import-list button,
+.material-tile,
+.tool-option,
+.designer-mode,
+.layer-row strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .left-brush-panel .brush-option span {
@@ -7192,6 +7203,238 @@ select {
 
   .product-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+#design-view,
+#design-view * {
+  min-width: 0;
+}
+
+#design-view .section-head,
+.canvas-ai-header,
+.personal-head-actions,
+.template-icon-actions,
+.template-draft-actions,
+.designer-actions,
+.asset-edit-actions,
+.print-order-entry,
+.print-order-create-card,
+.community-template-card,
+.choice-card,
+.ai-workflow-card {
+  overflow-wrap: anywhere;
+}
+
+.design-grid {
+  grid-template-columns: repeat(auto-fit, minmax(clamp(112px, 18vw, 160px), 1fr));
+  gap: clamp(10px, 2vw, 16px);
+}
+
+.design-card {
+  padding: clamp(10px, 1.8vw, 14px);
+}
+
+.template-card {
+  gap: 6px;
+}
+
+.template-cover {
+  max-height: clamp(148px, 24vw, 214px);
+}
+
+.template-id,
+.template-sub,
+.template-icon-actions button,
+.template-draft-actions button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.template-icon-actions button,
+.template-draft-actions button {
+  min-width: 0;
+  justify-content: center;
+}
+
+.gallery-category-row {
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  min-width: 0;
+}
+
+.gallery-category-row-offset {
+  grid-column: auto;
+}
+
+.gallery-category-board p,
+.gallery-filter-line span,
+.community-filter-board p {
+  white-space: normal;
+}
+
+.template-detail-card,
+.community-template-card,
+.print-order-card,
+.print-order-create-card,
+.choice-card,
+.ai-workflow-card,
+.color-card {
+  max-width: calc(100vw - 24px);
+}
+
+.print-order-card,
+.print-order-create-card {
+  overflow-x: hidden;
+}
+
+.print-order-create-card select,
+.print-order-create-card button,
+.print-order-create-card label,
+.choice-stack button,
+.template-detail-actions button,
+.template-comment-submit-row button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.print-order-create-card select,
+.community-upload-fields input,
+.community-upload-fields select,
+.community-upload-fields textarea {
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1180px) {
+  .designer-board {
+    min-height: clamp(560px, 74vh, 760px);
+  }
+}
+
+@media (max-width: 760px) {
+  #design-view .section-head,
+  .personal-head-actions,
+  .canvas-sub-switch,
+  .canvas-ai-actions,
+  .template-comment-submit-row,
+  .asset-edit-actions {
+    width: 100%;
+  }
+
+  .canvas-sub-switch,
+  .personal-head-actions,
+  .canvas-ai-actions,
+  .template-comment-submit-row {
+    flex-wrap: wrap;
+  }
+
+  .canvas-sub-switch {
+    width: 100%;
+  }
+
+  .canvas-sub-switch button,
+  .personal-head-actions button,
+  .canvas-ai-actions button,
+  .template-comment-submit-row button {
+    flex: 1 1 min(150px, 100%);
+    white-space: normal;
+  }
+
+  .design-grid,
+  .personal-design-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(128px, 100%), 1fr));
+    gap: 12px;
+  }
+
+  .template-cover {
+    max-height: 184px;
+  }
+
+  .template-detail-card {
+    width: min(560px, calc(100vw - 20px));
+  }
+
+  .community-template-card,
+  .print-order-card,
+  .print-order-create-card,
+  .choice-card,
+  .ai-workflow-card {
+    width: calc(100vw - 20px);
+    padding: 14px;
+  }
+
+  .print-order-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .print-order-entry-art {
+    min-height: clamp(96px, 28vw, 140px);
+  }
+
+  .print-order-create-card .template-detail-close,
+  .print-order-card .template-detail-close,
+  .community-template-card .template-detail-close {
+    position: sticky;
+    top: 0;
+    right: auto;
+    justify-self: end;
+    margin-left: auto;
+  }
+
+  .community-upload-layout,
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-preview,
+  .community-upload-drop {
+    min-height: clamp(220px, 58vw, 320px);
+  }
+}
+
+@media (max-width: 430px) {
+  .designer-board {
+    --left-panel-width: clamp(58px, 17vw, 72px);
+    --right-panel-width: clamp(70px, 21vw, 86px);
+    min-height: 620px;
+  }
+
+  .designer-board .canvas-stage {
+    min-height: 500px;
+    padding-inline: calc(var(--left-panel-width) + 6px) calc(var(--right-panel-width) + 6px);
+  }
+
+  .designer-board .canvas-viewport {
+    width: min(100%, 230px);
+    height: min(460px, 64vh);
+    min-height: 360px;
+  }
+
+  .designer-board .canvas-nail {
+    width: clamp(118px, 38vw, 160px);
+  }
+
+  .designer-left,
+  .designer-right {
+    top: 106px;
+    bottom: 78px;
+  }
+
+  .dynamic-panel,
+  .designer-left {
+    padding: 5px;
+  }
+
+  .import-list button,
+  .material-tile,
+  .tool-option,
+  .left-brush-panel .brush-option {
+    line-height: 1.15;
+  }
+
+  .template-card {
+    padding: 8px;
   }
 }
 

@@ -3086,7 +3086,7 @@ async function loadGalleryTaxonomy() {
 
 async function loadPublicCatalog() {
   try {
-    const response = await fetch("/api/public-catalog", { cache: "no-store" });
+    const response = await fetch("/api/public-catalog");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     if (payload?.data) {
@@ -7260,7 +7260,7 @@ async function exportTransparentPng() {
   context.save();
   applyNailClip(context, currentFinger().shape, out.width, out.height);
   for (const layer of currentFinger().layers.slice().reverse()) {
-    if (!layer.visible) return;
+    if (!layer.visible) continue;
     context.save();
     context.globalAlpha = layer.type === "asset" && layer.filtersBaked ? 1 : layer.opacity;
     if (layer.type === "asset" && layer.src) {
@@ -7274,7 +7274,9 @@ async function exportTransparentPng() {
   const link = document.createElement("a");
   link.download = `nail-design-${Date.now()}.png`;
   link.href = out.toDataURL("image/png");
+  document.body.appendChild(link);
   link.click();
+  link.remove();
   showToast(t("designExported"));
 }
 
@@ -7898,7 +7900,6 @@ document.addEventListener("click", async (event) => {
   }
 
   if (event.target.closest("#apply-design")) openApplyTargetModal();
-  if (event.target.closest("#export-design")) exportTransparentPng();
   if (event.target.closest("#exit-design")) openExitChoiceModal();
 
   if (event.target.closest("#save-design")) {
@@ -8915,7 +8916,9 @@ function exportFabricTransparentPng() {
   const link = document.createElement("a");
   link.download = `nail-design-${Date.now()}.png`;
   link.href = fabricCanvas.toDataURL({ format: "png", multiplier: 2 });
+  document.body.appendChild(link);
   link.click();
+  link.remove();
   showToast(t("designExported"));
 }
 
@@ -9053,6 +9056,10 @@ document.addEventListener("click", (event) => {
 
 $("#brush-size").addEventListener("input", syncFabricBrush);
 $("#brush-opacity").addEventListener("input", syncFabricBrush);
+$("#export-design")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  exportTransparentPng();
+});
 $("#gallery-search")?.addEventListener("input", (event) => {
   gallerySearch = event.target.value;
   resetTemplateRenderLimit();

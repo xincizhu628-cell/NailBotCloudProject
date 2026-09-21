@@ -5,6 +5,7 @@
 
 CREATE TABLE IF NOT EXISTS users (
   user_id TEXT PRIMARY KEY,
+  public_user_id TEXT UNIQUE,
   username TEXT NOT NULL,
   user_kind TEXT NOT NULL DEFAULT 'guest',
   recovery_code TEXT UNIQUE,

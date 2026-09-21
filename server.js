@@ -4,6 +4,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 const os = require("os");
 const crypto = require("crypto");
+const zlib = require("zlib");
 const { Pool } = require("pg");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { createSquarePaymentService } = require("./services/squarePaymentService");
@@ -72,6 +73,7 @@ const server = http.createServer(async (req, res) => {
     if (await codeRoutes(req, res, url)) return;
     if (url.pathname === "/api/manufacturer/code-activation" || url.pathname === "/api/manufacturer/print-usage") {
       if (req.method !== "POST") { sendJson(res, 405, { ok: false, error: "Method not allowed" }); return; }
+      if (process.env.MANUFACTURER_API_ENABLED !== "true") { sendJson(res, 503, { ok: false, error: "Manufacturer API is paused" }); return; }
       if (!manufacturerIntegration) { sendJson(res, 503, { ok: false, error: "PostgreSQL is required" }); return; }
       if (!manufacturerIntegration.tokenOk(req, process.env.MANUFACTURER_CALLBACK_TOKEN)) { sendJson(res, 401, { ok: false, error: "Unauthorized" }); return; }
       try {
@@ -140,12 +142,14 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (url.pathname === '/api/admin/order-stock') {
+      if (process.env.MANUFACTURER_API_ENABLED !== "true") { sendJson(res,503,{ok:false,error:'厂家库存接口已暂停'});return; }
       if(!manufacturerIntegration){sendJson(res,503,{ok:false,error:'Manufacturer integration is not configured'});return;}
       try{await ensurePgAdminRuntimeSchema();const body=await readJson(req);if(req.method!=='POST'){sendJson(res,405,{ok:false,error:'Method not allowed'});return;}sendJson(res,200,await manufacturerIntegration.queryOrderStocks(body.orderId||body.order_id),{'Cache-Control':'no-store'});}
       catch(error){sendJson(res,400,{ok:false,error:error.message},{'Cache-Control':'no-store'});}
       return;
     }
     if (url.pathname === '/api/admin/product-inventory') {
+      if (process.env.MANUFACTURER_API_ENABLED !== "true") { sendJson(res,503,{ok:false,error:'厂家库存接口已暂停'});return; }
       if(!manufacturerIntegration){sendJson(res,503,{ok:false,error:'Manufacturer integration is not configured'});return;}
       try{await ensurePgAdminRuntimeSchema();if(req.method!=='POST'){sendJson(res,405,{ok:false,error:'Method not allowed'});return;}sendJson(res,200,await manufacturerIntegration.queryAllProductStocks(),{'Cache-Control':'no-store'});}
       catch(error){sendJson(res,400,{ok:false,error:error.message},{'Cache-Control':'no-store'});}
@@ -219,6 +223,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/user/profile") {
       await handleUserProfile(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/user/update-profile") {
+      await handleUserUpdateProfile(req, res);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/user/promos") {
@@ -788,9 +796,11 @@ async function createPaidOrderRecord(body = {}, payment = {}) {
     orderedAt: new Date().toISOString(),
     items,
   };
-  const sync = (typeof manufacturerIntegration !== "undefined" && manufacturerIntegration)
-    ? await manufacturerIntegration.pushOrder(orderId, generatedCodes.pickupCode, items)
-    : await notifyManufacturerOrder(manufacturerPayload);
+  const sync = process.env.MANUFACTURER_API_ENABLED === "true"
+    ? ((typeof manufacturerIntegration !== "undefined" && manufacturerIntegration)
+      ? await manufacturerIntegration.pushOrder(orderId, generatedCodes.pickupCode, items)
+      : await notifyManufacturerOrder(manufacturerPayload))
+    : { status: "paused", error: "", response: "" };
   await pgPool.query(
     `
     UPDATE orders
@@ -1122,6 +1132,7 @@ function publicPgUser(row) {
     recoveryCode: row.recovery_code || "",
     email: row.email || null,
     phone: row.phone || null,
+    displayUserId: row.public_user_id || row.user_id,
     avatarText: String(row.username || "U").slice(0, 1).toUpperCase(),
   };
 }
@@ -1155,7 +1166,33 @@ function normalizeContact(targetType, targetValue) {
 }
 
 function makeVerificationCode() {
-  return String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+  return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+}
+
+async function deliverVerificationCode(type, target, code, purpose) {
+  if (type === "email") {
+    const { SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) throw new Error("Email verification is unavailable: configure SMTP_HOST, SMTP_USER and SMTP_PASS.");
+    const nodemailer = require("nodemailer");
+    const transport = nodemailer.createTransport({
+      host: SMTP_HOST, port: Number(process.env.SMTP_PORT || 587),
+      secure: process.env.SMTP_SECURE === "true", auth: { user: SMTP_USER, pass: SMTP_PASS },
+      connectionTimeout:10000, greetingTimeout:10000, socketTimeout:10000,
+    });
+    await transport.sendMail({ from: SMTP_FROM || SMTP_USER, to: target,
+      subject: "Nailbot verification code",
+      text: `Your Nailbot verification code is ${code}. It expires in 5 minutes. Purpose: ${purpose}.`,
+    });
+    return { sent: true, provider: "email" };
+  }
+  const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER } = process.env;
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER) throw new Error("SMS verification is unavailable: configure Twilio credentials.");
+  const twilio = require("twilio");
+  await twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN).messages.create({
+    from: TWILIO_FROM_NUMBER, to: target,
+    body: `Nailbot verification code: ${code}. Expires in 5 minutes.`,
+  });
+  return { sent: true, provider: "sms" };
 }
 
 async function pgEnsureMember(client, userId) {
@@ -1248,6 +1285,7 @@ async function handlePgUserRequestCode(body) {
   }
   const username = String(body.username || "").trim();
   if (purpose === "create_account") {
+    if (!username) return { ok:false, error:'Please enter a username first.' };
     const duplicate = (await pgPool.query(
       "SELECT user_id FROM users WHERE username=$1 OR email=$2 OR phone=$3 LIMIT 1",
       [username, type === "email" ? value : "", type === "phone" ? value : ""],
@@ -1261,7 +1299,11 @@ async function handlePgUserRequestCode(body) {
     )).rows[0];
     if (!existing) return { ok: false, error: "No account is bound to this email or phone." };
   }
+  const recent = (await pgPool.query("SELECT count(*)::int AS count, max(created_at::timestamptz) AS latest FROM auth_verification_codes WHERE target_type=$1 AND target_value=$2 AND purpose=$3 AND created_at::timestamptz > now()-interval '1 hour'",[type,value,purpose])).rows[0];
+  if (Number(recent.count) >= 5) return { ok:false, error:'Too many verification requests. Try again later.' };
+  if (recent.latest && Date.now()-new Date(recent.latest).getTime() < 60000) return { ok:false, error:'Please wait one minute before requesting another code.' };
   const code = makeVerificationCode();
+  const delivery = await deliverVerificationCode(type, value, code, purpose);
   const { passwordHash, passwordSalt } = hashPgPassword(code);
   const verificationId = `verify_${crypto.randomUUID().replace(/-/g, "")}`;
   await pgPool.query(
@@ -1279,12 +1321,7 @@ async function handlePgUserRequestCode(body) {
     targetType: type,
     target: value,
     expiresInSeconds: 300,
-    delivery: {
-      sent: false,
-      provider: "development-code",
-      message: `Verification code prepared for ${type}. Configure an email/SMS provider to send it automatically.`,
-      devCode: code,
-    },
+    delivery,
   };
 }
 
@@ -1419,6 +1456,7 @@ async function getPgAuthSession(sessionId) {
 }
 
 async function handlePgUserProfile(body) {
+  await ensurePgProfileSchema();
   const session = await getPgAuthSession(body.sessionId);
   if (!session.ok) return session;
   const accounts = await safePgRows(
@@ -1430,6 +1468,7 @@ async function handlePgUserProfile(body) {
     `,
     [session.user.userId],
   );
+  const avatar = session.row.avatar_asset_id ? (await pgPool.query('SELECT url,base64_data FROM assets WHERE asset_id=$1',[session.row.avatar_asset_id])).rows[0] : null;
   return {
     ok: true,
     user: {
@@ -1437,6 +1476,7 @@ async function handlePgUserProfile(body) {
       createdAt: session.row.created_at,
       lastSeenAt: session.row.last_seen_at,
       thirdPartyAccounts: accounts,
+      avatarUrl: avatar?.url || avatar?.base64_data || "",
     },
     sessionId: session.sessionId,
   };
@@ -3393,6 +3433,52 @@ function splitDeviceIds(value) {
   return String(value || "").split(/[，,;；\s]+/).map((item) => cleanPgText(item)).filter(Boolean);
 }
 
+async function handleUserUpdateProfile(req, res) {
+  try {
+    if (!hasPostgresRuntime()) { sendJson(res, 503, { ok:false, error:'Profile editing requires PostgreSQL.' }); return; }
+    const result = await handlePgUserUpdateProfile(await readJson(req));
+    sendJson(res, result.ok ? 200 : 401, result, { 'Cache-Control':'no-store' });
+  } catch(error) {
+    sendJson(res, 400, { ok:false, error:error.message || 'Failed to update profile.' }, { 'Cache-Control':'no-store' });
+  }
+}
+
+let pgProfileSchemaReady = false;
+async function ensurePgProfileSchema() {
+  if (pgProfileSchemaReady) return;
+  await pgPool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS public_user_id TEXT');
+  await pgPool.query('CREATE UNIQUE INDEX IF NOT EXISTS users_public_user_id_unique_ci ON users (lower(public_user_id)) WHERE public_user_id IS NOT NULL');
+  pgProfileSchemaReady = true;
+}
+
+async function handlePgUserUpdateProfile(body) {
+  await ensurePgProfileSchema();
+  const session = await getPgAuthSession(body.sessionId);
+  if (!session.ok) return session;
+  const field = String(body.field || '');
+  const value = String(body.value || '').trim();
+  if (field === 'username') {
+    if (value.length < 2 || value.length > 50 || /[<>\r\n]/.test(value)) throw new Error('用户名须为 2–50 个字符，不得包含尖括号或换行。');
+    const duplicate = (await pgPool.query('SELECT 1 FROM users WHERE lower(username)=lower($1) AND user_id<>$2 LIMIT 1',[value,session.row.user_id])).rows.length;
+    if (duplicate) throw new Error('用户名已被使用。');
+    await pgPool.query('UPDATE users SET username=$1,updated_at=now() WHERE user_id=$2',[value,session.row.user_id]);
+  } else if (field === 'userId') {
+    if (!/^[A-Za-z0-9_-]{3,32}$/.test(value)) throw new Error('用户 ID 须为 3–32 位英文字母、数字、下划线或连字符。');
+    const duplicate = (await pgPool.query('SELECT 1 FROM users WHERE user_id<>$2 AND (lower(user_id)=lower($1) OR lower(public_user_id)=lower($1)) LIMIT 1',[value,session.row.user_id])).rows.length;
+    if (duplicate) throw new Error('用户 ID 已被使用。');
+    try { await pgPool.query('UPDATE users SET public_user_id=$1,updated_at=now() WHERE user_id=$2',[value,session.row.user_id]); }
+    catch(error) { if(error.code==='23505') throw new Error('用户 ID 已被使用。'); throw error; }
+  } else if (field === 'avatar') {
+    if (!/^data:image\/(?:png|jpeg|webp);base64,/i.test(value)) throw new Error('头像须为 PNG、JPEG 或 WebP 图片。');
+    const image = parseImageDataUrl(value);
+    if (!image || image.buffer.length > 2 * 1024 * 1024) throw new Error('头像不得超过 2 MB。');
+    const asset = await resolvePgUploadedImageAsset(value, '', 'user-avatar');
+    await pgPool.query('UPDATE assets SET owner_user_id=$1 WHERE asset_id=$2 AND owner_user_id IS NULL',[session.row.user_id,asset.assetId]);
+    await pgPool.query('UPDATE users SET avatar_asset_id=$1,updated_at=now() WHERE user_id=$2',[asset.assetId,session.row.user_id]);
+  } else throw new Error('Unsupported profile field.');
+  return handlePgUserProfile(body);
+}
+
 async function validatePgBoundDevices(value) {
   const deviceIds = [...new Set(splitDeviceIds(value))];
   if (!deviceIds.length) return { primary: "", list: [] };
@@ -3487,9 +3573,9 @@ async function loadPgTaxonomy() {
   };
 }
 
-async function loadPgTemplates(admin = false) {
+async function loadPgTemplates(admin = false, assetMap = null) {
   const [assets, templateLinks, galleryLinks] = await Promise.all([
-    pgAssetMap(),
+    assetMap || pgAssetMap(),
     pgTaxonomyMap("template"),
     safePgRows("SELECT gallery_type, gallery_id, template_id FROM gallery_templates"),
   ]);
@@ -3572,9 +3658,9 @@ async function loadPgTemplates(admin = false) {
   });
 }
 
-async function loadPgMaterialBases() {
+async function loadPgMaterialBases(assetMap = null) {
   const [assets, materialRows] = await Promise.all([
-    pgAssetMap(),
+    assetMap || pgAssetMap(),
     safePgRows("SELECT material_id, material, image, status FROM materials WHERE status='on' ORDER BY created_at ASC"),
   ]);
   const items = await safePgRows(`
@@ -3708,8 +3794,8 @@ async function loadPgProducts() {
   });
 }
 
-async function loadPgEvents() {
-  const assets = await pgAssetMap();
+async function loadPgEvents(assetMap = null) {
+  const assets = assetMap || await pgAssetMap();
   const items = await safePgRows(`
     SELECT
       e.event_id,
@@ -3780,30 +3866,31 @@ async function handleGalleryTaxonomy(req, res) {
   }
 }
 
+let publicCatalogCache = null;
+let publicCatalogLoading = null;
+async function buildPublicCatalog() {
+  const assets = await pgAssetMap();
+  const [taxonomy, templates, materialBases, products, events, community, deviceInfo] = await Promise.all([
+    loadPgTaxonomy(), loadPgTemplates(false,assets), loadPgMaterialBases(assets), loadPgProducts(),
+    loadPgEvents(assets), loadPgArticles(),
+    safePgRows("SELECT id, equip_id, type, address, status FROM device_info WHERE COALESCE(status, 'active')='active' ORDER BY created_at DESC"),
+  ]);
+  return { taxonomy, templates, material_bases:materialBases, products, events, community, device_info:deviceInfo };
+}
 async function handlePublicCatalog(req, res) {
   try {
     requirePostgresRuntime("load public catalog");
-    const [taxonomy, templates, materialBases, products, events, community, deviceInfo] = await Promise.all([
-      loadPgTaxonomy(),
-      loadPgTemplates(),
-      loadPgMaterialBases(),
-      loadPgProducts(),
-      loadPgEvents(),
-      loadPgArticles(),
-      safePgRows("SELECT id, equip_id, type, address, status FROM device_info WHERE COALESCE(status, 'active')='active' ORDER BY created_at DESC"),
-    ]);
+    if (!publicCatalogCache || publicCatalogCache.expires < Date.now()) {
+      if (!publicCatalogLoading) publicCatalogLoading = buildPublicCatalog().then(value => {
+        publicCatalogCache = { value, expires:Date.now()+30000 };
+        return value;
+      }).finally(() => { publicCatalogLoading = null; });
+      await publicCatalogLoading;
+    }
     sendJson(res, 200, {
       ok: true,
-      data: {
-        taxonomy,
-        templates,
-        material_bases: materialBases,
-        products,
-        events,
-        community,
-        device_info: deviceInfo,
-      },
-    }, { "Cache-Control": "no-store" });
+      data: publicCatalogCache.value,
+    }, { "Cache-Control": "public, max-age=30" });
   } catch (error) {
     sendJson(res, 500, { error: error.message || "Failed to load public catalog data." }, { "Cache-Control": "no-store" });
   }
@@ -4681,9 +4768,19 @@ function serveStatic(requestPath, res, headOnly) {
       sendJson(res, 404, { error: "Not found" });
       return;
     }
-    res.writeHead(200, { "Content-Type": mimeTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream" });
-    if (headOnly) res.end();
-    else res.end(data);
+    const extension = path.extname(filePath).toLowerCase();
+    const cacheSeconds = ['.png','.jpg','.jpeg','.webp','.svg','.ico'].includes(extension) ? 86400 : ['.css','.js'].includes(extension) ? 300 : 0;
+    const headers = { "Content-Type": mimeTypes[extension] || "application/octet-stream", "Cache-Control": cacheSeconds ? `public, max-age=${cacheSeconds}` : "no-cache" };
+    const compressible = ['.html','.css','.js','.json','.svg'].includes(extension) && data.length > 1024;
+    if (compressible && /\bgzip\b/.test(String(res.req?.headers['accept-encoding'] || ''))) {
+      zlib.gzip(data, (gzipError, compressed) => {
+        if (!gzipError) { res.writeHead(200, { ...headers, 'Content-Encoding':'gzip', 'Vary':'Accept-Encoding' }); res.end(headOnly ? undefined : compressed); }
+        else { res.writeHead(200, headers); res.end(headOnly ? undefined : data); }
+      });
+      return;
+    }
+    res.writeHead(200, headers);
+    res.end(headOnly ? undefined : data);
   });
 }
 
@@ -4828,8 +4925,14 @@ function runPythonJsonScript(scriptPath, payload) {
 
 function sendJson(res, status, payload, headers = {}) {
   const body = normalizeErrorPayload(res, status, payload);
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", ...headers });
-  res.end(JSON.stringify(body));
+  const encoded = Buffer.from(JSON.stringify(body));
+  const responseHeaders = { "Content-Type": "application/json; charset=utf-8", ...headers };
+  if (encoded.length > 1024 && /\bgzip\b/.test(String(res.req?.headers['accept-encoding'] || ''))) {
+    zlib.gzip(encoded, (error, compressed) => {
+      if (!error) { res.writeHead(status, { ...responseHeaders, 'Content-Encoding':'gzip', 'Vary':'Accept-Encoding' }); res.end(compressed); }
+      else { res.writeHead(status, responseHeaders); res.end(encoded); }
+    });
+  } else { res.writeHead(status, responseHeaders); res.end(encoded); }
 }
 
 function loadEnvFile(filePath) {
