@@ -1,11 +1,22 @@
 /* Storefront layout based on the shop sketch. Existing catalog controls keep their IDs. */
 body:has(#products-view.active) .topbar { display: none; }
 body:has(#products-view.active) .main { max-width: 1600px; padding: clamp(16px, 3vw, 44px); }
+body:has(#products-view.active) .sidebar { background: #ffafcd; }
+.main-nav .nav-item { transition: font-size .2s ease, color .2s ease; }
+.main-nav .nav-item.active { color: #4c1832; font-size: clamp(.94rem, 1.24vw, 1.18rem); font-weight: 800; }
+.main-nav { gap: clamp(6px, 1.5vw, 24px); }
 
 #products-view.active { display: block; min-width: 0; }
 #products-view .shop-heading { margin: 4px 0 22px; }
 #products-view .shop-heading h2 { margin: 0; font-size: clamp(2rem, 4.5vw, 4.25rem); line-height: 1.08; letter-spacing: -.045em; }
 #products-view .shop-storefront { min-width: 0; overflow: hidden; padding: clamp(14px, 2.6vw, 34px); border: 1px solid rgba(158, 82, 119, .22); border-radius: 26px; background: rgba(255,255,255,.72); box-shadow: 0 22px 65px rgba(132, 61, 95, .08); }
+#products-view .shop-catalog { margin-top: clamp(44px, 6vw, 88px); }
+#products-view .shop-catalog-panel { min-width: 0; padding: clamp(16px, 2.7vw, 34px); border: 1px solid #f2a8c7; border-radius: 20px; background: #fff1f7; }
+#products-view .shop-featured-grid { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: clamp(10px, 1.5vw, 20px); }
+#products-view .shop-coupon-tabs { width: 100%; justify-content: center; margin: 0 0 12px; padding: 0; background: transparent; gap: clamp(10px, 2vw, 30px); }
+#products-view .shop-coupon-tabs button { min-width: clamp(150px, 19vw, 270px); padding: 14px 24px; border: 0; border-radius: 12px; background: #ffdfeb; color: #5c3548; font-weight: 700; font-size: clamp(1rem, 1.7vw, 1.45rem); box-shadow: none; }
+#products-view .shop-coupon-tabs button[aria-pressed="true"] { background: #c94d81; color: #fff; box-shadow: 0 8px 22px rgba(173, 53, 107, .2); }
+#products-view .product-filter-board[hidden], #products-view .shop-coupon-filters[hidden] { display: none !important; }
 
 #products-view .shop-hero { position: relative; min-width: 0; }
 #products-view .product-promo-rail { width: 100%; max-width: none; margin: 0; padding: 0; }
@@ -27,9 +38,35 @@ body:has(#products-view.active) .main { max-width: 1600px; padding: clamp(16px, 
 #products-view .products-actions { min-width: 0; flex: 0 1 280px; margin: 0; }
 #products-view .products-search { min-width: 0; width: 100%; }
 #products-view .products-search input { min-width: 0; width: 100%; }
-#products-view .shop-coupon-tabs { width: fit-content; max-width: 100%; margin: 8px 0 22px; padding: 5px; border-radius: 12px; }
+#products-view .shop-coupon-filters { display: grid; grid-template-columns: repeat(4,minmax(130px,1fr)) minmax(190px,1.35fr); align-items: end; gap: 14px; margin: 0 0 28px; }
+#products-view .shop-coupon-filters label { display: grid; min-width: 0; gap: 6px; color: #7f4560; font-size: .78rem; font-weight: 750; }
+#products-view .shop-coupon-filters select, #products-view .shop-coupon-filters input { min-width: 0; width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid #efb4cc; border-radius: 10px; background: #fff; color: #4b2b3d; }
+#products-view .shop-coupon-list { grid-template-columns: repeat(5,minmax(0,1fr)); gap: clamp(14px, 2vw, 28px); }
+#products-view .shop-coupon-item { min-width: 0; min-height: 260px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px; border: 1px solid #f2dfe7; border-radius: 16px; background: #fff; color: #382935; text-align: left; box-shadow: 0 12px 30px rgba(91, 87, 91, .17); transition: transform .18s ease, box-shadow .18s ease; }
+#products-view .shop-coupon-item:hover { transform: translateY(-4px); box-shadow: 0 18px 36px rgba(91, 87, 91, .22); }
+#products-view .shop-coupon-kind { color: #bd4b7a; font-size: .8rem; font-weight: 800; }
+#products-view .shop-coupon-item strong { font-size: 1.1rem; line-height: 1.35; overflow-wrap: anywhere; }
+#products-view .shop-coupon-value { color: #943e65; font-size: 1.25rem; font-weight: 800; }
+#products-view .shop-coupon-dates { margin-top: auto; color: #685d65; font-size: .78rem; line-height: 1.5; }
+#products-view .shop-coupon-status { font-size: .82rem; color: #aa426f; font-weight: 800; }
+#products-view .shop-coupon-empty { grid-column: 1 / -1; margin: 0; padding: 34px; text-align: center; }
+
+.shop-coupon-dialog { width: min(620px, calc(100vw - 28px)); max-height: min(82vh, 760px); overflow: auto; padding: clamp(22px, 3vw, 40px); border: 1px solid #efb4cc; border-radius: 20px; background: linear-gradient(165deg,#fffafe,#ffeaf5); color: #332532; box-shadow: 0 32px 90px rgba(47, 37, 48, .38); }
+.shop-coupon-dialog::backdrop { background: rgba(45, 33, 47, .5); }
+.shop-coupon-dialog-head { display: flex; align-items: center; justify-content: space-between; color: #b44978; font-weight: 800; }
+.shop-coupon-dialog-head button { width: 34px; height: 34px; border: 1px solid #ecc1d3; border-radius: 8px; background: #fff; color: #9f4f70; font-size: 1.4rem; }
+.shop-coupon-dialog h2 { margin: 12px 0; font-size: clamp(1.5rem, 3vw, 2.4rem); }
+.shop-coupon-dialog-value { margin: 0 0 20px; color: #a63868; font-size: 1.3rem; font-weight: 800; }
+.shop-coupon-dialog dl { display: grid; gap: 12px; margin: 0; }
+.shop-coupon-dialog dl div { display: grid; grid-template-columns: 108px minmax(0,1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid #efd5e0; }
+.shop-coupon-dialog dt { color: #7d5e70; font-weight: 700; }
+.shop-coupon-dialog dd { margin: 0; overflow-wrap: anywhere; }
+.shop-coupon-dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.shop-coupon-dialog-actions button, .shop-coupon-dialog-actions a { display: inline-grid; place-items: center; min-height: 44px; padding: 9px 18px; border: 0; border-radius: 10px; background: #ce5c8b; color: #fff; text-decoration: none; font-weight: 750; }
+.shop-coupon-dialog-actions button { background: #fff; color: #a63868; border: 1px solid #ecc1d3; }
 
 #products-view .product-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(10px, 1.5vw, 20px); border: 0; }
+#products-view .shop-featured-grid .product-card { width: 100%; }
 #products-view .product-card { min-width: 0; min-height: 0; grid-template-rows: auto auto auto; overflow: hidden; border: 1px solid rgba(158, 82, 119, .16); border-radius: 16px; background: #fff; box-shadow: 0 8px 24px rgba(88, 40, 65, .06); transition: transform .18s ease, box-shadow .18s ease; }
 #products-view .product-card:hover { transform: translateY(-3px); box-shadow: 0 14px 32px rgba(88, 40, 65, .13); }
 #products-view .product-card-heading { min-height: 68px; align-content: center; padding: 12px; }
@@ -42,7 +79,9 @@ body:has(#products-view.active) .main { max-width: 1600px; padding: clamp(16px, 
 #products-view .list-load-sentinel { border-radius: 12px; }
 
 @media (max-width: 1199px) {
-  #products-view .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #products-view .product-grid, #products-view .shop-featured-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #products-view .shop-coupon-list { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  #products-view .shop-coupon-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 760px) {
   body:has(#products-view.active) .main { padding: 12px; }
@@ -52,7 +91,9 @@ body:has(#products-view.active) .main { max-width: 1600px; padding: clamp(16px, 
   #products-view .shop-hero > .cart-button { right: 0; }
   #products-view .product-filter-inline { flex-basis: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #products-view .products-actions { flex-basis: 100%; }
-  #products-view .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #products-view .product-grid, #products-view .shop-featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #products-view .shop-coupon-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #products-view .shop-coupon-tabs button { min-width: 0; flex: 1; }
 }
 @media (max-width: 420px) {
   #products-view .product-promo-card { min-height: 220px; }
@@ -62,4 +103,7 @@ body:has(#products-view.active) .main { max-width: 1600px; padding: clamp(16px, 
   #products-view .product-meta { padding: 9px; }
   #products-view .shop-coupon-tabs { width: 100%; }
   #products-view .shop-coupon-tabs button { min-width: 0; overflow-wrap: anywhere; }
+  #products-view .shop-coupon-filters { grid-template-columns: 1fr; }
+  #products-view .shop-coupon-list { grid-template-columns: 1fr; }
+  .shop-coupon-dialog dl div { grid-template-columns: 1fr; gap: 4px; }
 }

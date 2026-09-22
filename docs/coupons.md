@@ -2,6 +2,8 @@
 
 优惠活动继续使用活动表；优惠券使用 `coupons`、`user_coupons`。`coupon_checkouts` 保存付款预留与重试结果，避免同一张券重复消费。数据库迁移：`database/migrations/20260910_coupons.sql`。
 
+`coupon_events` 是优惠券与活动的多对多关系表，使用 `(coupon_id,event_id)` 作为联合主键。迁移文件为 `database/migrations/20260922_coupon_events.sql`，也可运行 `node tools/order_code_database.js --apply-coupon-events`。后台创建、编辑优惠券时可多选绑定活动；商城的活动主题筛选只展示已上架商城优惠券绑定的有效活动，并按关系表筛选。
+
 - 先计算有效商品活动，再应用一张用户优惠券；满减直接减金额，percent_off 按百分比减免（20 表示八折）。门槛按适用商品活动后的金额判断，仅优惠适用商品，不产生负数。
 - 适用商品必选且支持多个；场景支持商城、积分兑换、任务奖励、第三方平台。购物车结算仅使用带“商城”场景的券。
 - 免费赠品、买送使用所选赠品列表，每种一份；商品以零元显示并入单，模板在下单成功后写入个人收藏。

@@ -40,7 +40,8 @@
   }
 
   function options(list, selected = []) {
-    return list.map((item) => `<option value="${esc(item.value)}" ${selected.includes(String(item.value)) ? "selected" : ""}>${esc(item.label)} (${esc(item.value)})</option>`).join("");
+    const selectedValues = new Set(selected.map(String));
+    return list.map((item) => `<option value="${esc(item.value)}" ${selectedValues.has(String(item.value)) ? "selected" : ""}>${esc(item.label)} (${esc(item.value)})</option>`).join("");
   }
 
   function localDate(value) {
@@ -105,7 +106,7 @@
     try {
       data = await api();
       panel.innerHTML = `<h2>优惠券管理</h2><button data-create-coupon>创建优惠券</button><p data-coupon-status></p>
-        <div style="overflow:auto"><table class="admin-record-table"><thead><tr><th>Coupon ID</th><th>名称</th><th>类型</th><th>状态</th><th>有效期（悉尼）</th><th>操作</th></tr></thead><tbody>${data.rows.map((coupon) => `<tr><td>${esc(coupon.coupon_id)}</td><td>${esc(coupon.coupon_name)}</td><td>${esc(labels[coupon.deal_type])}</td><td>${coupon.status === "published" ? "上架" : "未上架"}</td><td>${esc(formatDate(coupon.expiry_date))}</td><td><button data-edit-coupon="${esc(coupon.coupon_id)}">编辑</button> <button data-grant-coupon="${esc(coupon.coupon_id)}">发放给用户</button> <button data-link-coupon="${esc(coupon.coupon_id)}">生成领取链接</button></td></tr>`).join("")}</tbody></table></div>
+        <div style="overflow:auto"><table class="admin-record-table"><thead><tr><th>Coupon ID</th><th>名称</th><th>类型</th><th>绑定活动</th><th>状态</th><th>有效期（悉尼）</th><th>操作</th></tr></thead><tbody>${data.rows.map((coupon) => `<tr><td>${esc(coupon.coupon_id)}</td><td>${esc(coupon.coupon_name)}</td><td>${esc(labels[coupon.deal_type])}</td><td>${esc((coupon.event_ids || []).map(id => data.options.events.find(event => String(event.value) === String(id))?.label || id).join('、') || '未绑定')}</td><td>${coupon.status === "published" ? "上架" : "未上架"}</td><td>${esc(formatDate(coupon.expiry_date))}</td><td><button data-edit-coupon="${esc(coupon.coupon_id)}">编辑</button> <button data-grant-coupon="${esc(coupon.coupon_id)}">发放给用户</button> <button data-link-coupon="${esc(coupon.coupon_id)}">生成领取链接</button></td></tr>`).join("")}</tbody></table></div>
         <h3>用户优惠券记录</h3><div style="overflow:auto"><table class="admin-record-table"><thead><tr><th>优惠券</th><th>用户</th><th>状态</th><th>订单</th></tr></thead><tbody>${data.assignments.map((assignment) => `<tr><td>${esc(assignment.coupon_id)}</td><td>${esc(assignment.username || assignment.user_id)}</td><td>${esc({ inactive: "未激活", unused: "未使用", used: "已使用", expired: "已过期" }[assignment.coupon_use_status])}</td><td>${esc(assignment.order_id)}</td></tr>`).join("")}</tbody></table></div>`;
     } catch (error) {
       panel.textContent = error.message;
@@ -113,7 +114,7 @@
   }
 
   function edit(id) {
-    const row = data.rows.find((coupon) => coupon.coupon_id === id) || { deal_type: "money_off", status: "unpublished", coupon_scene_type: ["商城"], coupon_available_items: [], rewarded_items: [] };
+    const row = data.rows.find((coupon) => coupon.coupon_id === id) || { deal_type: "money_off", status: "unpublished", coupon_scene_type: ["商城"], coupon_available_items: [], rewarded_items: [], event_ids: [] };
     const selectedProducts = new Map((row.coupon_available_items || []).map((productId) => [productId, data.options.products.find((item) => item.value === productId)?.label || productId]));
     const rewardProducts = new Map((row.rewarded_items || []).filter((item) => item.type === "product").map((item) => [item.id, data.options.products.find((product) => product.value === item.id)?.label || item.id]));
     const rewardTemplates = new Map((row.rewarded_items || []).filter((item) => item.type === "template").map((item) => [item.id, data.options.templates.find((template) => template.value === item.id)?.label || item.id]));
@@ -135,6 +136,7 @@
       <label><input name="expiry_always" type="checkbox" value="1" ${permanent ? "checked" : ""}> 永久有效</label>
       <label>上架状态<select name="status"><option value="unpublished">未上架</option><option value="published" ${row.status === "published" ? "selected" : ""}>上架</option></select></label>
       <label>使用场景<select name="scenes" multiple required>${options(scenes.map((value) => ({ value, label: value })), row.coupon_scene_type)}</select></label>
+      <label>绑定活动主题（可多选）<select name="events" multiple size="6">${options((data.options.events || []).map(event => ({...event,label: `${event.label}${event.status === 'active' ? '' : '（已停用）'}`})), row.event_ids || [])}</select></label>
       <label>领取链接（可空）<input name="coupon_url" value="${esc(row.coupon_url)}"></label>
       <p role="status"></p><button type="submit">保存</button> <button type="button" data-close>取消</button>
     </form>`;
@@ -169,6 +171,7 @@
         item.coupon_available_items = [...selectedProducts.keys()];
         if (!item.coupon_available_items.length) throw Error("请先查询并添加至少一个商品");
         item.coupon_scene_type = formData.getAll("scenes");
+        item.event_ids = formData.getAll("events").map(Number);
         item.rewarded_items = [...[...rewardProducts.keys()].map((giftId) => ({ type: "product", id: giftId })), ...[...rewardTemplates.keys()].map((templateId) => ({ type: "template", id: templateId }))];
         await api(id ? "PATCH" : "POST", { id, item });
         dialog.close();

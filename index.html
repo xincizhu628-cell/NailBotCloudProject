@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css?v=133" />
-  <link rel="stylesheet" href="assets/css/shop-coupons.css?v=20260910c"><link rel="stylesheet" href="assets/css/shop-layout.css?v=20260922a"><script src="assets/js/customer-translations.js?v=20260910c"></script><script src="assets/js/customer-i18n.js?v=20260910c"></script></head>
+  <link rel="stylesheet" href="assets/css/shop-coupons.css?v=20260910c"><link rel="stylesheet" href="assets/css/shop-layout.css?v=20260922c"><script src="assets/js/customer-translations.js?v=20260910c"></script><script src="assets/js/customer-i18n.js?v=20260910c"></script></head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
@@ -184,6 +184,11 @@
               </button>
             </div>
             <div class="shop-section-heading"><span data-i18n="shopPopularProducts">Popular Products</span></div>
+            <div class="shop-featured-grid" id="shop-featured-grid"></div>
+          </div>
+          <div class="shop-catalog">
+            <nav class="shop-coupon-tabs" aria-label="Shop categories"><button type="button" data-shop-tab="products" aria-pressed="true">Nail Products / 甲片产品</button><button type="button" data-shop-tab="coupons" aria-pressed="false">Coupons / 优惠券</button></nav>
+            <div class="shop-catalog-panel">
             <section class="product-filter-board" aria-label="Product filters">
               <div class="product-filter-inline" id="product-category-grid"></div>
               <div class="products-actions">
@@ -193,10 +198,17 @@
               </label>
               </div>
             </section>
-            <nav class="shop-coupon-tabs" aria-label="Shop categories"><button type="button" data-shop-tab="products" aria-pressed="true">Nail Products / 甲片产品</button><button type="button" data-shop-tab="coupons" aria-pressed="false">Coupons / 优惠券</button></nav>
+            <section class="shop-coupon-filters" id="shop-coupon-filters" aria-label="Coupon filters" hidden>
+              <label><span>优惠类型 / Deal</span><select id="shop-coupon-deal"><option value="">全部优惠 / All deals</option><option value="money_off">满减 / Money off</option><option value="percent_off">折扣 / Percentage off</option><option value="buy_x_get_y">买赠 / Buy &amp; get</option><option value="free_product">赠品 / Free gift</option></select></label>
+              <label><span>适用商品 / Products</span><select id="shop-coupon-product-type"><option value="">全部商品 / All products</option></select></label>
+              <label><span>活动主题 / Activity</span><select id="shop-coupon-event"><option value="">全部活动 / All activities</option></select></label>
+              <label><span>排序 / Sort</span><select id="shop-coupon-sort"><option value="default">默认 / Default</option><option value="expiry">即将到期 / Expiring soon</option><option value="value">优惠力度 / Saving value</option></select></label>
+              <label class="shop-coupon-search"><span>搜索 / Search</span><input id="shop-coupon-search" type="search" placeholder="优惠券名或适用商品 / Coupon or product" /></label>
+            </section>
             <div class="product-grid" id="product-grid"></div>
             <section id="shop-coupon-list" class="shop-coupon-list" hidden aria-live="polite"></section>
             </div>
+          </div>
         </section>
 
         <section class="view" id="about-view" data-title-key="pageAbout">
@@ -1039,8 +1051,8 @@
       </div>
     </div>
     <script src="assets/js/coupon-picker.js?v=20260921-time"></script>
-    <script src="app.js?v=20260921-catalog"></script>
-  <script src="assets/js/shop-coupons.js?v=20260921-time"></script></body>
+    <script src="app.js?v=20260922b"></script>
+  <script src="assets/js/shop-coupons.js?v=20260922c"></script></body>
 </html>
 
 

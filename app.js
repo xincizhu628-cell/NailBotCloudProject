@@ -6,7 +6,7 @@
     navCommunity: "Community",
     navMember: "Member Center",
     navDesign: "Design Center",
-    navProducts: "Press-On Nail Products",
+    navProducts: "Shop",
     navAbout: "About us",
     memberTier: "Aurora Member",
     memberHint: "Ready for rewards",
@@ -303,7 +303,7 @@
     navCommunity: "社区",
     navMember: "会员中心",
     navDesign: "设计中心",
-    navProducts: "穿戴甲销售",
+    navProducts: "商城",
     navAbout: "了解NailBot",
     memberTier: "极光会员",
     memberHint: "奖励待领取",
@@ -3361,7 +3361,7 @@ function observeTemplateLoadMore() {
 }
 
 function hydrateProductImages() {
-  const images = $$("#product-grid img[data-src]");
+  const images = $$("#product-grid img[data-src], #shop-featured-grid img[data-src]");
   if (productImageObserver) productImageObserver.disconnect();
   if (!images.length) {
     productImageObserver = null;
@@ -4528,14 +4528,16 @@ function filteredProducts() {
 
 function renderProducts() {
   const grid = $("#product-grid");
+  const featuredGrid = $("#shop-featured-grid");
   if (!grid) return;
   if (!publicCatalogLoaded) {
     grid.innerHTML = `<p class="muted">${lang === "zh" ? "正在加载商品..." : "Loading products..."}</p>`;
+    if (featuredGrid) featuredGrid.innerHTML = grid.innerHTML;
     return;
   }
   const items = filteredProducts();
   const shown = items.slice(0, productRenderLimit);
-  const productCards = shown.map((product) => {
+  const cardMarkup = (product) => {
     return `
       <button class="product-card" type="button" data-product-open="${product.id}">
         <span class="product-card-heading">
@@ -4558,11 +4560,16 @@ function renderProducts() {
         </span>
       </button>
     `;
-  }).join("");
+  };
+  const productCards = shown.map(cardMarkup).join("");
   const loadMore = items.length > shown.length
     ? `<div id="product-load-sentinel" class="list-load-sentinel">${lang === "zh" ? `继续加载 ${items.length - shown.length} 个商品...` : `Loading ${items.length - shown.length} more products...`}</div>`
     : "";
   grid.innerHTML = productCards + loadMore || `<p class="muted">${lang === "zh" ? "没有找到匹配商品。" : "No matching products."}</p>`;
+  if (featuredGrid) {
+    const featured = productItems().filter((product) => truthyFlag(product.isFeatured));
+    featuredGrid.innerHTML = (featured.length ? featured : productItems()).slice(0, 6).map(cardMarkup).join("");
+  }
   hydrateProductImages();
   observeProductLoadMore();
 }
