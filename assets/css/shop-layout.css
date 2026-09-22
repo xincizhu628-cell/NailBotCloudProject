@@ -1,0 +1,65 @@
+/* Storefront layout based on the shop sketch. Existing catalog controls keep their IDs. */
+body:has(#products-view.active) .topbar { display: none; }
+body:has(#products-view.active) .main { max-width: 1600px; padding: clamp(16px, 3vw, 44px); }
+
+#products-view.active { display: block; min-width: 0; }
+#products-view .shop-heading { margin: 4px 0 22px; }
+#products-view .shop-heading h2 { margin: 0; font-size: clamp(2rem, 4.5vw, 4.25rem); line-height: 1.08; letter-spacing: -.045em; }
+#products-view .shop-storefront { min-width: 0; overflow: hidden; padding: clamp(14px, 2.6vw, 34px); border: 1px solid rgba(158, 82, 119, .22); border-radius: 26px; background: rgba(255,255,255,.72); box-shadow: 0 22px 65px rgba(132, 61, 95, .08); }
+
+#products-view .shop-hero { position: relative; min-width: 0; }
+#products-view .product-promo-rail { width: 100%; max-width: none; margin: 0; padding: 0; }
+#products-view .product-promo-track { min-width: 0; }
+#products-view .product-promo-card { min-height: clamp(230px, 27vw, 390px); align-content: center; justify-items: center; gap: 14px; padding: 32px clamp(24px, 5vw, 76px); border-radius: 20px; text-align: center; }
+#products-view .product-promo-card span { font-size: .8rem; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+#products-view .product-promo-card strong { max-width: 800px; font-size: clamp(1.8rem, 4vw, 3.9rem); line-height: 1.12; }
+#products-view .product-promo-card p { max-width: 620px; margin: 0; font-size: clamp(.9rem, 1.3vw, 1.15rem); line-height: 1.6; }
+#products-view .product-promo-dots { padding: 16px 72px 8px; }
+#products-view .shop-hero > .cart-button { position: absolute; right: 12px; bottom: 0; z-index: 2; min-width: 100px; }
+
+#products-view .shop-section-heading { display: flex; align-items: center; gap: clamp(12px, 2vw, 28px); margin: clamp(28px, 4vw, 56px) 0 24px; color: var(--ink); font-size: clamp(1.3rem, 2.25vw, 2rem); font-weight: 800; text-align: center; }
+#products-view .shop-section-heading::before,
+#products-view .shop-section-heading::after { content: ""; flex: 1; height: 1px; background: rgba(158, 82, 119, .3); }
+#products-view .shop-section-heading span { min-width: 0; }
+
+#products-view .product-filter-board { min-height: 0; display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin: 0 0 14px; padding: 0; border: 0; background: transparent; }
+#products-view .product-filter-inline { min-width: 0; flex: 1 1 360px; }
+#products-view .products-actions { min-width: 0; flex: 0 1 280px; margin: 0; }
+#products-view .products-search { min-width: 0; width: 100%; }
+#products-view .products-search input { min-width: 0; width: 100%; }
+#products-view .shop-coupon-tabs { width: fit-content; max-width: 100%; margin: 8px 0 22px; padding: 5px; border-radius: 12px; }
+
+#products-view .product-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(10px, 1.5vw, 20px); border: 0; }
+#products-view .product-card { min-width: 0; min-height: 0; grid-template-rows: auto auto auto; overflow: hidden; border: 1px solid rgba(158, 82, 119, .16); border-radius: 16px; background: #fff; box-shadow: 0 8px 24px rgba(88, 40, 65, .06); transition: transform .18s ease, box-shadow .18s ease; }
+#products-view .product-card:hover { transform: translateY(-3px); box-shadow: 0 14px 32px rgba(88, 40, 65, .13); }
+#products-view .product-card-heading { min-height: 68px; align-content: center; padding: 12px; }
+#products-view .product-card-heading strong,
+#products-view .product-card-heading small { white-space: normal; overflow-wrap: anywhere; }
+#products-view .product-cover { width: 100%; aspect-ratio: 3 / 4; height: auto; }
+#products-view .product-cover.has-product-image { height: auto; }
+#products-view .product-meta { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; padding: 12px; }
+#products-view .product-meta em { grid-column: 1 / -1; white-space: normal; }
+#products-view .list-load-sentinel { border-radius: 12px; }
+
+@media (max-width: 1199px) {
+  #products-view .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  body:has(#products-view.active) .main { padding: 12px; }
+  #products-view .shop-storefront { padding: 14px; border-radius: 18px; }
+  #products-view .product-promo-card { min-height: 250px; padding: 24px 18px; }
+  #products-view .product-promo-dots { padding-right: 90px; }
+  #products-view .shop-hero > .cart-button { right: 0; }
+  #products-view .product-filter-inline { flex-basis: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #products-view .products-actions { flex-basis: 100%; }
+  #products-view .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  #products-view .product-promo-card { min-height: 220px; }
+  #products-view .product-filter-inline { grid-template-columns: 1fr; }
+  #products-view .product-grid { gap: 9px; }
+  #products-view .product-card-heading { min-height: 60px; padding: 9px; }
+  #products-view .product-meta { padding: 9px; }
+  #products-view .shop-coupon-tabs { width: 100%; }
+  #products-view .shop-coupon-tabs button { min-width: 0; overflow-wrap: anywhere; }
+}

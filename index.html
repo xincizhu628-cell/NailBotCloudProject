@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css?v=133" />
-  <link rel="stylesheet" href="assets/css/shop-coupons.css?v=20260910c"><script src="assets/js/customer-translations.js?v=20260910c"></script><script src="assets/js/customer-i18n.js?v=20260910c"></script></head>
+  <link rel="stylesheet" href="assets/css/shop-coupons.css?v=20260910c"><link rel="stylesheet" href="assets/css/shop-layout.css?v=20260922a"><script src="assets/js/customer-translations.js?v=20260910c"></script><script src="assets/js/customer-i18n.js?v=20260910c"></script></head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
@@ -169,26 +169,34 @@
         </section>
 
         <section class="view" id="products-view" data-title-key="pageProducts">
-          <section class="product-promo-rail" aria-label="Product campaigns">
-            <div class="product-promo-track" id="product-promo-track"></div>
-          </section>
-
-          <section class="product-filter-board" aria-label="Product filters">
-            <div class="product-filter-inline" id="product-category-grid"></div>
-            <div class="products-actions">
+          <header class="shop-heading">
+            <p class="eyebrow">NAILBOT STORE</p>
+            <h2 data-i18n="shopStoreTitle">Shop</h2>
+          </header>
+          <div class="shop-storefront">
+            <div class="shop-hero">
+              <section class="product-promo-rail" aria-label="Product campaigns">
+                <div class="product-promo-track" id="product-promo-track"></div>
+              </section>
               <button class="cart-button" id="open-cart" type="button" aria-label="Open cart">
                 <span class="cart-glyph">Cart</span>
                 <span class="cart-count" id="cart-count">0</span>
               </button>
+            </div>
+            <div class="shop-section-heading"><span data-i18n="shopPopularProducts">Popular Products</span></div>
+            <section class="product-filter-board" aria-label="Product filters">
+              <div class="product-filter-inline" id="product-category-grid"></div>
+              <div class="products-actions">
               <label class="products-search">
                 <span>Search</span>
                 <input id="product-search" type="search" data-i18n-placeholder="productSearchPlaceholder" placeholder="Search product ID or tag" />
               </label>
+              </div>
+            </section>
+            <nav class="shop-coupon-tabs" aria-label="Shop categories"><button type="button" data-shop-tab="products" aria-pressed="true">Nail Products / 甲片产品</button><button type="button" data-shop-tab="coupons" aria-pressed="false">Coupons / 优惠券</button></nav>
+            <div class="product-grid" id="product-grid"></div>
+            <section id="shop-coupon-list" class="shop-coupon-list" hidden aria-live="polite"></section>
             </div>
-          </section>
-
-          <nav class="shop-coupon-tabs" aria-label="Shop categories"><button type="button" data-shop-tab="products" aria-pressed="true">Nail Products / 甲片产品</button><button type="button" data-shop-tab="coupons" aria-pressed="false">Coupons / 优惠券</button></nav>
-          <div class="product-grid" id="product-grid"></div><section id="shop-coupon-list" class="shop-coupon-list" hidden aria-live="polite"></section>
         </section>
 
         <section class="view" id="about-view" data-title-key="pageAbout">
