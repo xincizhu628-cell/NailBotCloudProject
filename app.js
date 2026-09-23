@@ -8023,7 +8023,7 @@ $("#topic-filter")?.addEventListener("change", (event) => {
   renderPosts();
 });
 
-$("#global-search").addEventListener("input", (event) => {
+$("#global-search")?.addEventListener("input", (event) => {
   const term = event.target.value.trim().toLowerCase();
   $$(".task-card, .post-card, .promo-card, .reward-card, .design-card, .product-card").forEach((card) => {
     card.style.display = !term || card.textContent.toLowerCase().includes(term) ? "" : "none";
