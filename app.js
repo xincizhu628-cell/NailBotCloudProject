@@ -1037,7 +1037,8 @@ function translatePage() {
     node.placeholder = t(node.dataset.i18nPlaceholder);
   });
   $$("[data-language-toggle]").forEach(button=>button.textContent = lang === "en" ? "中文" : "EN");
-  $("#page-title").textContent = t($(".view.active").dataset.titleKey);
+  const pageTitle = $("#page-title");
+  if (pageTitle) pageTitle.textContent = t($(".view.active").dataset.titleKey);
   document.body.dataset.activeView = $(".view.active")?.id?.replace("-view", "") || "home";
   renderAuthWidget(currentAuthUser);
   renderAll();
@@ -5014,7 +5015,8 @@ function activateView(viewName) {
   $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === viewName));
   $$(".view").forEach((view) => view.classList.toggle("active", view.id === `${viewName}-view`));
   document.body.dataset.activeView = viewName;
-  $("#page-title").textContent = t($(".view.active").dataset.titleKey);
+  const pageTitle = $("#page-title");
+  if (pageTitle) pageTitle.textContent = t($(".view.active").dataset.titleKey);
   if (viewName !== "products") stopProductPromoAutoplay();
   if (viewName === "products") {
     renderProductFilters();
